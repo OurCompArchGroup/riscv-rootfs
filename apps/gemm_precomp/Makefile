@@ -30,8 +30,8 @@ $(error clang not found at $(AME_CLANG))
 endif
 
 AME_TARGET  = -target riscv64-unknown-linux-gnu
-AME_ARCH    = -march=rv64g_v_zvfh_zame_zvl128b_zicbop_zihintpause
-AME_FEATURE = -Xclang -target-feature -Xclang +matrix-xuantie-0.6
+AME_ARCH    = -march=rv64g_v_zvfh_zames_zmasync_zvl128b_zicbop_zihintpause
+AME_FEATURE =
 
 RESERVED_PHYS_BASE_ADDR ?= 0x100000000UL
 RESERVED_MEMORY_SIZE    ?= 0x180000000UL

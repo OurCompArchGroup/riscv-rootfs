@@ -12,12 +12,33 @@
 // Tile size: M=AME_TILE_M, K=AME_TILE_K, N=AME_TILE_N (atomic AME variant)
 // C(MxN) = A(MxK) × B^T(NxK), where B is transposed in memory
 // This function computes a single MxN tile output
+void ggml_ame_init(void) {
+    const int TILE_M = AME_TILE_M;
+    const int TILE_K = AME_TILE_K;
+    const int TILE_N = AME_TILE_N;
+    const unsigned long cfg_i8 = AME_MCFG_INT8;
+    const unsigned long cfg_i32 = AME_MCFG_INT32;
+    int tmp;
+
+    MSETTILEM(tmp, TILE_M);
+    MSETTILEK(tmp, TILE_K);
+    MSETTILEN(tmp, TILE_N);
+    MSETCFG(mcfg0, cfg_i8);
+    MSETCFG(mcfg1, cfg_i8);
+    MSETCFG(mcfg2, cfg_i8);
+    MSETCFG(mcfg3, cfg_i8);
+    MSETCFG(mcfg4, cfg_i32);
+    MSETCFG(mcfg5, cfg_i32);
+    MSETCFG(mcfg6, cfg_i32);
+    MSETCFG(mcfg7, cfg_i32);
+}
+
 void ggml_ame_gemm_tile_i8_i32_bT(
     const int8_t * A,      // Input matrix A: MxK
     const int8_t * B,      // Input matrix B (transposed): NxK
     int32_t * C            // Output matrix C: MxN
 ) {
-    asm volatile("msyncreset tok0" ::: "memory");
+    MSYNC_RESET(sync1);
 
     // ----------------------------------------------------------------
     // Prefetch A, B, C tiles into dcache before issuing AME loads.
@@ -58,32 +79,23 @@ void ggml_ame_gemm_tile_i8_i32_bT(
         }
     }
 #endif /* AME_PREFETCH */
-    /* Fixed tile dimensions */
-    const int TILE_M = AME_TILE_M;
-    const int TILE_K = AME_TILE_K;
-    const int TILE_N = AME_TILE_N;
-
-    /* Configure matrix dimensions */
-    int tmp;
-    MSETTILEM(tmp, TILE_M);
-    MSETTILEK(tmp, TILE_K);
-    MSETTILEN(tmp, TILE_N);
-
     /* Preload C matrix to initialize accumulator */
     int32_t *addr_c = C;
-    int stride_c = TILE_N; /* Row stride (in elements) */
+    int stride_c = AME_TILE_N; /* Row stride (in elements) */
 
     MZERO_ACC(acc0);
+#ifdef AME_TILE_TRACE
     printf("addr_c: %p, stride_c: %d\n", (void*)addr_c, stride_c);
+#endif
     MLCE32(acc0, addr_c, stride_c * 4);
 
     /* Load left matrix A tile: MxK */
     const int8_t *addr_a = A;
-    MLAE8(tr0, addr_a, TILE_K);
+    MLAE8(tr0, addr_a, AME_TILE_K);
 
     /* Load right matrix B tile (transposed): NxK */
     const int8_t *addr_b = B;
-    MLBE8(tr1, addr_b, TILE_K);
+    MLBE8(tr1, addr_b, AME_TILE_K);
 
     /* INT8 matrix multiply-accumulate: C(MxN) = A(MxK) x B^T(NxK) */
     MQMA(acc0, tr0, tr1);
@@ -91,7 +103,8 @@ void ggml_ame_gemm_tile_i8_i32_bT(
     /* Store INT32 result to C (MxN) */
     MSCE32(acc0, addr_c, stride_c * 4);
 
-    asm volatile("mrelease tok0" ::: "memory");
+    MRELEASE(sync1);
     int acquire_target = 1;
-    asm volatile("macquire %0,tok0" :: "r"(acquire_target) : "memory");
+    MACQUIRE(sync1, acquire_target);
+    MFENCE();
 }

@@ -43,6 +43,7 @@ int precomp_test(void)
     nemu_signal(NOTIFY_PROFILER);
     printf("AME GEMM precomp test: %d cases, C(%dx%d) = A(%dx%d) * B^T(%dx%d)\n",
            PRECOMP_NUM_TESTS, M, N, M, K, N, K);
+    ggml_ame_init();
 
     int total_fail = 0;
 

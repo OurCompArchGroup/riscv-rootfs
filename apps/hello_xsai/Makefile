@@ -21,8 +21,8 @@ $(error llvm-objdump not found at $(AME_OBJDUMP))
 endif
 
 AME_TARGET = -target riscv64-unknown-linux-gnu
-AME_ARCH = -march=rv64g_v_zvfh_zame_zvl128b_zicbop_zihintpause
-AME_FEATURE = -Xclang -target-feature -Xclang +matrix-xuantie-0.6
+AME_ARCH = -march=rv64g_v_zvfh_zames_zmasync_zvl128b_zicbop_zihintpause
+AME_FEATURE =
 
 RESERVED_PHYS_BASE_ADDR ?= 0x100000000UL
 RESERVED_MEMORY_SIZE    ?= 0x180000000UL
@@ -48,7 +48,7 @@ override LD := $(AME_CLANG_RESOLVED)
 
 .PHONY: disasm-ame static-debug
 disasm-ame: $(AME_OBJ)
-	$(AME_OBJDUMP) -d $(AME_OBJ) --mattr=+matrix-xuantie-0.6 > $(AME_DISASM)
+	$(AME_OBJDUMP) -d $(AME_OBJ) --mattr=+zames,+zmasync > $(AME_DISASM)
 	@echo "generated $(AME_DISASM)"
 
 static-debug:

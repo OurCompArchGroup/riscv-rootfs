@@ -38,6 +38,7 @@ int auto_test() {
     // INIT();
     printf("Testing AME GEMM: C(%dx%d) = A(%dx%d) * B^T(%dx%d)\n", M, N, M, K, N, K);
     printf("Note: B is transposed, so B[n,k] is stored at B[n*K + k]\n\n");
+    ggml_ame_init();
     
     int8_t *A, *B;
     int32_t *C_ame, *C_ref;

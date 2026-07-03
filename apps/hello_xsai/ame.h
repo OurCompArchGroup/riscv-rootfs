@@ -76,118 +76,20 @@ typedef struct {
     int8_t qs[32];      // pre-unpacked 4-bit values to int8 [-8, 7]
 } block_q4_0_ame;
 
-// Matrix configuration instructions
-#ifdef STC
-#define MSETSEW(RD, SEW) \
-    asm volatile ( \
-        "msetsew %0, %1" \
-        : "=r"(RD) \
-        : "i"(SEW) \
-        : \
-    )
+// Proposal-12/Zames matrix configuration and operation helpers.
+#define AME_MCFG_INT8  0x02UL
+#define AME_MCFG_INT32 0x04UL
 
-#define MSETINT8(RD, VAL) \
-    asm volatile ( \
-        "msetint8 %0, %1" \
-        : "=r"(RD) \
-        : "i"(VAL) \
-        : \
-    )
+#define MSETSEW(RD, SEW) ((void)(RD), (void)(SEW))
 
-#define MSETTILEM(RD, VAL) \
-    asm volatile ( \
-        "msettilem %0, %1" \
-        : "=r"(RD) \
-        : "r"(VAL) \
-        : \
-    )
-
-#define MSETTILEK(RD, VAL) \
-    asm volatile ( \
-        "msettilek %0, %1" \
-        : "=r"(RD) \
-        : "r"(VAL) \
-        : \
-    )
-
-#define MSETTILEN(RD, VAL) \
-    asm volatile ( \
-        "msettilen %0, %1" \
-        : "=r"(RD) \
-        : "r"(VAL) \
-        : \
-    )
-
-// Matrix accumulator zero instruction
-#define MZERO_ACC(ACC) \
-    asm volatile ( \
-        "mzero.acc.m " #ACC \
-        : \
-        : \
-        : \
-    )
-
-// Matrix load instructions
-#define MLAE8(REG, SRC, N) \
-    asm volatile ( \
-        "mlae8.m " #REG ", (%0), %1" \
-        : \
-        : "r"(SRC), "r"(N) \
-        : \
-    )
-
-#define MLBE8(REG, SRC, N) \
-    asm volatile ( \
-        "mlbe8.m " #REG ", (%0), %1" \
-        : \
-        : "r"(SRC), "r"(N) \
-        : \
-    )
-
-#define MLCE32(REG, SRC, N) \
-    asm volatile ( \
-        "mlce32.m " #REG ", (%0), %1" \
-        : \
-        : "r"(SRC), "r"(N) \
-        : \
-    )
-
-// Matrix store instruction
-#define MSCE32(REG, DST, N) \
-    asm volatile ( \
-        "msce32.m " #REG ", (%0), %1" \
-        : \
-        : "r"(DST), "r"(N) \
-        : "memory" \
-    )
-
-// Matrix multiply-accumulate instruction
-#define MMA(ACC, TR0, TR2) \
-    asm volatile ( \
-        "mmau.mm " #ACC ", " #TR0 ", " #TR2 "\n" \
-        : \
-        : \
-        : \
-    )
-
-#define MQMA(ACC, TR0, TR2) \
-    asm volatile ( \
-        "mqma.mm " #ACC ", " #TR0 ", " #TR2 "\n" \
-        : \
-        : \
-        : \
-    )
-#else
-#define MSETSEW(RD, SEW) ((void)0) //非STC没有这条指令, 空指令
-
-#define MSETINT8(RD, VAL) ((void)0) //非STC没有这条指令, 空指令
+#define MSETINT8(RD, VAL) ((void)(RD), (void)(VAL))
 
 #define MSETTILEM(RD, VAL) \
     asm volatile ( \
         "msettilem %0" \
         : \
         : "r"(VAL) \
-        : \
+        : "memory" \
     );(RD)=VAL;
 
 #define MSETTILEK(RD, VAL) \
@@ -195,7 +97,7 @@ typedef struct {
         "msettilek %0" \
         : \
         : "r"(VAL) \
-        : \
+        : "memory" \
     );(RD)=VAL;
 
 #define MSETTILEN(RD, VAL) \
@@ -203,47 +105,71 @@ typedef struct {
         "msettilen %0" \
         : \
         : "r"(VAL) \
-        : \
+        : "memory" \
     );(RD)=VAL;
+
+#define MSETCFG(MCFG, VAL) \
+    asm volatile ( \
+        "msetcfg " #MCFG ", %0" \
+        : \
+        : "r"(VAL) \
+        : "memory" \
+    )
+
+#define MSYNC_RESET(SYNC) \
+    asm volatile ( \
+        "msyncregreset " #SYNC \
+        : \
+        : \
+        : "memory" \
+    )
+
+#define MFENCE() \
+    asm volatile ( \
+        "mfence" \
+        : \
+        : \
+        : "memory" \
+    )
 
 // Matrix accumulator zero instruction
 #define MZERO_ACC(ACC) \
     asm volatile ( \
-        "mzero1r " #ACC \
+        "mzero " #ACC \
         : \
         : \
-        : \
+        : "memory" \
     )
 
 // Matrix load instructions
 #define MLAE8(REG, SRC, N) \
     asm volatile ( \
-        "mlae8 " #REG ", (%0), %1" \
+        "mla " #REG ", (%0), %1" \
         : \
         : "r"(SRC), "r"(N) \
-        : \
+        : "memory" \
     )
 
 #define MLBE8(REG, SRC, N) \
     asm volatile ( \
-        "mlbe8 " #REG ", (%0), %1" \
+        "mlb " #REG ", (%0), %1" \
         : \
         : "r"(SRC), "r"(N) \
-        : \
+        : "memory" \
     )
 
 #define MLCE32(REG, SRC, N) \
     asm volatile ( \
-        "mlce32 " #REG ", (%0), %1" \
+        "mlc " #REG ", (%0), %1" \
         : \
         : "r"(SRC), "r"(N) \
-        : \
+        : "memory" \
     )
 
 // Matrix store instruction
 #define MSCE32(REG, DST, N) \
     asm volatile ( \
-        "msce32 " #REG ", (%0), %1" \
+        "msc " #REG ", (%0), %1" \
         : \
         : "r"(DST), "r"(N) \
         : "memory" \
@@ -252,26 +178,43 @@ typedef struct {
 // Matrix multiply-accumulate instruction
 #define MMAU(ACC, TR0, TR2) \
     asm volatile ( \
-        "mmaccu.w.b" #ACC ", " #TR0 ", " #TR2 "\n" \
+        "mmacc " #ACC ", " #TR2 ", " #TR0 "\n" \
         : \
         : \
-        : \
+        : "memory" \
     )
 
 #define MQMA(ACC, TR0, TR2) \
     asm volatile ( \
-        "mmacc.w.b " #ACC ", " #TR0 ", " #TR2 "\n" \
+        "mmacc " #ACC ", " #TR2 ", " #TR0 "\n" \
         : \
         : \
-        : \
+        : "memory" \
     )
-#endif
+
+#define MRELEASE(SYNC) \
+    asm volatile ( \
+        "mrelease " #SYNC \
+        : \
+        : \
+        : "memory" \
+    )
+
+#define MACQUIRE(SYNC, VAL) \
+    asm volatile ( \
+        "macquire " #SYNC ", %0" \
+        : \
+        : "r"(VAL) \
+        : "memory" \
+    )
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Atomic tile GEMM (16x32x16)
+void ggml_ame_init(void);
+
+// Atomic tile GEMM (AME_TILE_M x AME_TILE_K x AME_TILE_N)
 void ggml_ame_gemm_tile_i8_i32_bT(
     const int8_t * A,
     const int8_t * B,
