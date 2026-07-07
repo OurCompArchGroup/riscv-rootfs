@@ -4,6 +4,7 @@
 
 extern int auto_test();
 extern int mem_test();
+extern int ame_gemm_smoke();
 #ifdef __linux__
 #define INIT() do { } while (0)
 #else

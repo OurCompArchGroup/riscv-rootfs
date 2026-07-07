@@ -5,12 +5,15 @@ file /bin/gemm_precomp ${RISCV_ROOTFS_HOME}/rootfsimg/build/gemm_precomp 755 0 0
 file /bin/hello_xsai ${RISCV_ROOTFS_HOME}/rootfsimg/build/hello_xsai 755 0 0
 file /bin/after_workload ${RISCV_ROOTFS_HOME}/rootfsimg/build/after_workload 755 0 0
 file /bin/pmu_test ${RISCV_ROOTFS_HOME}/rootfsimg/build/pmu_test 755 0 0
+file /bin/ame_panel_probe ${RISCV_ROOTFS_HOME}/rootfsimg/build/ame_panel_probe 755 0 0
+file /bin/ame_hw_probe ${RISCV_ROOTFS_HOME}/rootfsimg/build/ame_hw_probe 755 0 0
 file /bin/llama-simple ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-simple 755 0 0
 file /bin/llama-simple-xsai ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-simple-xsai 755 0 0
 file /bin/llama-bench ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-bench 755 0 0
 file /bin/llama-batched-bench ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-batched-bench 755 0 0
+file /bin/test-backend-ops ${RISCV_ROOTFS_HOME}/rootfsimg/build/test-backend-ops 755 0 0
 file /bin/llama-xsai ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-xsai 755 0 0
-# file /root/llama-model.gguf ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-model.gguf 644 0 0
+file /root/llama-model.gguf ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-model.gguf 644 0 0
 file /root/llama3.2_1b_q8.gguf.om ${RISCV_ROOTFS_HOME}/apps/llama.cpp/models/llama3.2_1b_q8.gguf.om 644 0 0
 file /root/stories15M-q8_0.gguf.om ${RISCV_ROOTFS_HOME}/apps/llama.cpp/models/stories15M-q8_0.gguf.om 644 0 0
 file /root/qwen3_0.6b_q8.gguf.om ${RISCV_ROOTFS_HOME}/apps/llama.cpp/models/qwen3_0.6b_q8.gguf.om 644 0 0

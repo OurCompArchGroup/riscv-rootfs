@@ -60,9 +60,9 @@ static inline void ame_logf(const char * fmt, ...) {
         ame_logf(__VA_ARGS__); \
     } while (0)
 
-#define AME_TILE_M 128
+#define AME_TILE_M 64
 #define AME_TILE_K 64
-#define AME_TILE_N 128
+#define AME_TILE_N 64
 
 #define AME_Q8_PACK_K 64
 
@@ -91,6 +91,10 @@ typedef struct {
     uint16_t d;
     int8_t qs[AME_Q8_PACK_K];
 } block_q8_ame64;
+
+#define AME_MCFG_INT8  0x02
+#define AME_MCFG_UINT8 0x03
+#define AME_MCFG_INT32 0x04
 
 // Matrix configuration instructions
 #ifdef STC
@@ -135,60 +139,52 @@ typedef struct {
     )
 
 // Matrix accumulator zero instruction
-#define MZERO_ACC(ACC) \
+#define MZERO(ACC) \
     asm volatile ( \
-        "mzero.acc.m " #ACC \
+        "mzero " #ACC \
         : \
         : \
         : \
     )
 
 // Matrix load instructions
-#define MLAE8(REG, SRC, N) \
+#define MLA(REG, SRC, N) \
     asm volatile ( \
-        "mlae8.m " #REG ", (%0), %1" \
+        "mla " #REG ", (%0), %1" \
         : \
         : "r"(SRC), "r"(N) \
         : \
     )
 
-#define MLBE8(REG, SRC, N) \
+#define MLB(REG, SRC, N) \
     asm volatile ( \
-        "mlbe8.m " #REG ", (%0), %1" \
+        "mlb " #REG ", (%0), %1" \
         : \
         : "r"(SRC), "r"(N) \
         : \
     )
 
-#define MLCE32(REG, SRC, N) \
+#define MLC(REG, SRC, N) \
     asm volatile ( \
-        "mlce32.m " #REG ", (%0), %1" \
+        "mlc " #REG ", (%0), %1" \
         : \
         : "r"(SRC), "r"(N) \
         : \
     )
 
 // Matrix store instruction
-#define MSCE32(REG, DST, N) \
+#define MSC(REG, DST, N) \
     asm volatile ( \
-        "msce32.m " #REG ", (%0), %1" \
+        "msc " #REG ", (%0), %1" \
         : \
         : "r"(DST), "r"(N) \
         : "memory" \
     )
 
 // Matrix multiply-accumulate instruction
-#define MMA(ACC, TR0, TR2) \
+#define MMACC(ACC, TR0, TR2) \
     asm volatile ( \
-        "mmau.mm " #ACC ", " #TR0 ", " #TR2 "\n" \
-        : \
-        : \
-        : \
-    )
-
-#define MQMA(ACC, TR0, TR2) \
-    asm volatile ( \
-        "mqma.mm " #ACC ", " #TR0 ", " #TR2 "\n" \
+        "mmacc " #ACC ", " #TR2 ", " #TR0 "\n" \
         : \
         : \
         : \
@@ -223,65 +219,80 @@ typedef struct {
     );(RD)=VAL;
 
 // Matrix accumulator zero instruction
-#define MZERO_ACC(ACC) \
+#define MZERO(ACC) \
     asm volatile ( \
-        "mzero1r " #ACC \
+        "mzero " #ACC \
         : \
         : \
         : \
     )
 
 // Matrix load instructions
-#define MLAE8(REG, SRC, N) \
+#define MLA(REG, SRC, N) \
     asm volatile ( \
-        "mlae8 " #REG ", (%0), %1" \
+        "mla " #REG ", (%0), %1" \
         : \
         : "r"(SRC), "r"(N) \
         : \
     )
 
-#define MLBE8(REG, SRC, N) \
+#define MLB(REG, SRC, N) \
     asm volatile ( \
-        "mlbe8 " #REG ", (%0), %1" \
+        "mlb " #REG ", (%0), %1" \
         : \
         : "r"(SRC), "r"(N) \
         : \
     )
 
-#define MLCE32(REG, SRC, N) \
+#define MLC(REG, SRC, N) \
     asm volatile ( \
-        "mlce32 " #REG ", (%0), %1" \
+        "mlc " #REG ", (%0), %1" \
         : \
         : "r"(SRC), "r"(N) \
         : \
     )
 
 // Matrix store instruction
-#define MSCE32(REG, DST, N) \
+#define MSC(REG, DST, N) \
     asm volatile ( \
-        "msce32 " #REG ", (%0), %1" \
+        "msc " #REG ", (%0), %1" \
         : \
         : "r"(DST), "r"(N) \
         : "memory" \
     )
 
 // Matrix multiply-accumulate instruction
-#define MMAU(ACC, TR0, TR2) \
+#define MMACC(ACC, TR0, TR2) \
     asm volatile ( \
-        "mmaccu.w.b" #ACC ", " #TR0 ", " #TR2 "\n" \
-        : \
-        : \
-        : \
-    )
-
-#define MQMA(ACC, TR0, TR2) \
-    asm volatile ( \
-        "mmacc.w.b " #ACC ", " #TR0 ", " #TR2 "\n" \
+        "mmacc " #ACC ", " #TR2 ", " #TR0 "\n" \
         : \
         : \
         : \
     )
 #endif
+
+#define MSETCFG(CFG, VAL) \
+    asm volatile ( \
+        "msetcfg " #CFG ", %0" \
+        : \
+        : "r"(VAL) \
+        : "memory" \
+    )
+
+static inline void ggml_ame_config_i8_i32(void) {
+#if defined(__riscv)
+    const unsigned long cfg_i8 = AME_MCFG_INT8;
+    const unsigned long cfg_i32 = AME_MCFG_INT32;
+    MSETCFG(mcfg0, cfg_i8);
+    MSETCFG(mcfg1, cfg_i8);
+    MSETCFG(mcfg2, cfg_i8);
+    MSETCFG(mcfg3, cfg_i8);
+    MSETCFG(mcfg4, cfg_i32);
+    MSETCFG(mcfg5, cfg_i32);
+    MSETCFG(mcfg6, cfg_i32);
+    MSETCFG(mcfg7, cfg_i32);
+#endif
+}
 
 #ifdef __cplusplus
 extern "C" {

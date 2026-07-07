@@ -40,6 +40,8 @@ HOST_TOOLS_STAMP := $(HOST_BUILD_DIR)/.tools-ready
 TARGET_TOOLS_STAMP := $(TARGET_BUILD_DIR)/.tools-built
 HOST_CONVERT_BIN := $(HOST_BUILD_DIR)/bin/llama-convert-llama2c-to-ggml
 HOST_QUANTIZE_BIN := $(HOST_BUILD_DIR)/bin/llama-quantize
+HOST_BENCH_BIN := $(HOST_BUILD_DIR)/bin/llama-bench
+HOST_BATCHED_BENCH_BIN := $(HOST_BUILD_DIR)/bin/llama-batched-bench
 TARGET_SIMPLE_BIN      := $(TARGET_BUILD_DIR)/bin/llama-simple
 ROOTFS_SIMPLE_BIN      := $(ROOTFS_BUILD_DIR)/llama-simple
 TARGET_SIMPLE_XSAI_BIN := $(TARGET_BUILD_DIR)/bin/llama-simple-xsai
@@ -48,6 +50,8 @@ TARGET_BENCH_BIN       := $(TARGET_BUILD_DIR)/bin/llama-bench
 ROOTFS_BENCH_BIN       := $(ROOTFS_BUILD_DIR)/llama-bench
 TARGET_BATCHED_BENCH_BIN := $(TARGET_BUILD_DIR)/bin/llama-batched-bench
 ROOTFS_BATCHED_BENCH_BIN := $(ROOTFS_BUILD_DIR)/llama-batched-bench
+TARGET_TEST_BACKEND_OPS_BIN := $(TARGET_BUILD_DIR)/bin/test-backend-ops
+ROOTFS_TEST_BACKEND_OPS_BIN := $(ROOTFS_BUILD_DIR)/test-backend-ops
 ROOTFS_WRAPPER := $(ROOTFS_BUILD_DIR)/llama-xsai
 ROOTFS_WRAPPER_SRC := $(APP_DIR)/llama-xsai.sh
 ROOTFS_MODEL_NAME ?= llama-model.gguf
@@ -102,6 +106,7 @@ MODEL_READY_FILE := $(if $(MODEL_QUANTIZE_ENABLED),$(MODEL_FINAL_FILE),$(MODEL_G
 RUN_MODEL ?= $(MODEL_READY_FILE)
 RUN_PROMPT ?= Once
 RUN_ARGS ?=
+TEST_BACKEND_OPS_ARGS ?= test -o MUL_MAT --buft RISCV_AME -p 'type_a=q8_0,type_b=f32,m=(288|768),n=128,k=(288|768),bs=\[1,1\],nr=\[1,1\]'
 
 RISCV_TRIPLE ?= riscv64-unknown-linux-gnu
 RISCV_MARCH ?= rv64gc_zba_zicbop
@@ -123,6 +128,7 @@ HOST_CMAKE_ARGS = \
 	-DGGML_CCACHE=OFF \
 	-DGGML_OPENMP=OFF \
 	-DLLAMA_CURL=OFF \
+	-DLLAMA_OPENSSL=OFF \
 	-DBUILD_SHARED_LIBS=OFF \
 	-DLLAMA_BUILD_TESTS=OFF \
 	-DLLAMA_BUILD_SERVER=OFF \
@@ -144,7 +150,7 @@ TARGET_CMAKE_ARGS = \
 	-DLLAMA_CURL=OFF \
 	-DLLAMA_OPENSSL=OFF \
 	-DBUILD_SHARED_LIBS=OFF \
-	-DLLAMA_BUILD_TESTS=OFF \
+	-DLLAMA_BUILD_TESTS=ON \
 	-DLLAMA_BUILD_SERVER=OFF \
 	-DLLAMA_BUILD_TOOLS=ON \
 	-DLLAMA_BUILD_EXAMPLES=ON \
@@ -173,7 +179,7 @@ endif
 
 .PHONY: repo source-ready host-tools riscv fetch-model convert-model quantize-model \
 	prepare-model prepare-stories15m prepare-stories110M install install-model rootfs \
-	run-user print-config clean distclean help
+	run-user test-backend-ops-user print-config clean distclean help
 
 help:
 	@echo "llama.cpp xsai wrapper"
@@ -228,11 +234,14 @@ host-configure: | source-ready
 	@if [ -f "$(HOST_BUILD_DIR)/CMakeCache.txt" ]; then \
 		cached_c_flags=$$(grep '^CMAKE_C_FLAGS:STRING=' "$(HOST_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_cxx_flags=$$(grep '^CMAKE_CXX_FLAGS:STRING=' "$(HOST_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
+		cached_openssl=$$(grep '^LLAMA_OPENSSL:BOOL=' "$(HOST_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		expected_c_flags='$(HOST_EFFECTIVE_CFLAGS)'; \
 		expected_cxx_flags='$(HOST_EFFECTIVE_CXXFLAGS)'; \
+		expected_openssl='OFF'; \
 		if grep -Eq 'CMAKE_(C|CXX)_COMPILER:FILEPATH=.*/riscv64-.*-(gcc|g\+\+)' "$(HOST_BUILD_DIR)/CMakeCache.txt" || \
 		   [ "$$cached_c_flags" != "$$expected_c_flags" ] || \
-		   [ "$$cached_cxx_flags" != "$$expected_cxx_flags" ]; then \
+		   [ "$$cached_cxx_flags" != "$$expected_cxx_flags" ] || \
+		   [ "$$cached_openssl" != "$$expected_openssl" ]; then \
 			echo "Reconfiguring llama.cpp host build with native compilers and host flags..."; \
 			rm -rf "$(HOST_BUILD_DIR)"; \
 		fi; \
@@ -248,8 +257,10 @@ $(HOST_CONVERT_BIN): $(THIS_MAKEFILE) $(LLAMA_CPP_HOME)/CMakeLists.txt | source-
 	   [ "$(HOST_TOOLS_STAMP)" -ot "$(THIS_MAKEFILE)" ] || \
 	   [ "$(HOST_TOOLS_STAMP)" -ot "$(LLAMA_CPP_HOME)/CMakeLists.txt" ] || \
 	   [ ! -x "$(HOST_CONVERT_BIN)" ] || \
-	   [ ! -x "$(HOST_QUANTIZE_BIN)" ]; then \
-		$(CMAKE) --build $(HOST_BUILD_DIR) --target llama-convert-llama2c-to-ggml llama-quantize -j$(NPROC); \
+	   [ ! -x "$(HOST_QUANTIZE_BIN)" ] || \
+	   [ ! -x "$(HOST_BENCH_BIN)" ] || \
+	   [ ! -x "$(HOST_BATCHED_BENCH_BIN)" ]; then \
+		$(CMAKE) --build $(HOST_BUILD_DIR) --target llama-convert-llama2c-to-ggml llama-quantize llama-bench llama-batched-bench -j$(NPROC); \
 		touch "$(HOST_TOOLS_STAMP)"; \
 	fi
 	@test -x "$@"
@@ -257,7 +268,10 @@ $(HOST_CONVERT_BIN): $(THIS_MAKEFILE) $(LLAMA_CPP_HOME)/CMakeLists.txt | source-
 $(HOST_QUANTIZE_BIN): $(HOST_CONVERT_BIN)
 	@test -x "$@"
 
-host-tools: $(HOST_CONVERT_BIN) $(HOST_QUANTIZE_BIN)
+$(HOST_BENCH_BIN) $(HOST_BATCHED_BENCH_BIN): $(HOST_CONVERT_BIN)
+	@test -x "$@"
+
+host-tools: $(HOST_CONVERT_BIN) $(HOST_QUANTIZE_BIN) $(HOST_BENCH_BIN) $(HOST_BATCHED_BENCH_BIN)
 
 $(TARGET_TOOLS_STAMP): target-configure
 	@needs_build=0; \
@@ -267,15 +281,16 @@ $(TARGET_TOOLS_STAMP): target-configure
 	   [ ! -x "$(TARGET_SIMPLE_BIN)" ] || \
 	   [ ! -x "$(TARGET_SIMPLE_XSAI_BIN)" ] || \
 	   [ ! -x "$(TARGET_BENCH_BIN)" ] || \
-	   [ ! -x "$(TARGET_BATCHED_BENCH_BIN)" ]; then \
+	   [ ! -x "$(TARGET_BATCHED_BENCH_BIN)" ] || \
+	   [ ! -x "$(TARGET_TEST_BACKEND_OPS_BIN)" ]; then \
 		needs_build=1; \
-	elif find "$(LLAMA_CPP_HOME)/cmake" "$(LLAMA_CPP_HOME)/common" "$(LLAMA_CPP_HOME)/examples" "$(LLAMA_CPP_HOME)/ggml" "$(LLAMA_CPP_HOME)/include" "$(LLAMA_CPP_HOME)/src" "$(LLAMA_CPP_HOME)/tools" \
+	elif find "$(LLAMA_CPP_HOME)/cmake" "$(LLAMA_CPP_HOME)/common" "$(LLAMA_CPP_HOME)/examples" "$(LLAMA_CPP_HOME)/ggml" "$(LLAMA_CPP_HOME)/include" "$(LLAMA_CPP_HOME)/src" "$(LLAMA_CPP_HOME)/tests" "$(LLAMA_CPP_HOME)/tools" \
 		-type f \( -name 'CMakeLists.txt' -o -name '*.cmake' -o -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
 		-newer "$@" -print -quit 2>/dev/null | grep -q .; then \
 		needs_build=1; \
 	fi; \
 	if [ $$needs_build -eq 1 ]; then \
-		$(CMAKE) --build $(TARGET_BUILD_DIR) --target llama-simple llama-simple-xsai llama-bench llama-batched-bench -j$(NPROC); \
+		$(CMAKE) --build $(TARGET_BUILD_DIR) --target llama-simple llama-simple-xsai llama-bench llama-batched-bench test-backend-ops -j$(NPROC); \
 		touch $@; \
 	fi
 
@@ -297,15 +312,18 @@ target-configure: | source-ready
 		cached_phys_base=$$(grep '^RESERVED_PHYS_BASE_ADDR:' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_mem_size=$$(grep '^RESERVED_MEMORY_SIZE:' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_build_tools=$$(grep '^LLAMA_BUILD_TOOLS:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
+		cached_build_tests=$$(grep '^LLAMA_BUILD_TESTS:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_openssl=$$(grep '^LLAMA_OPENSSL:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		expected_phys_base='$(LLAMA_DIRECT_MAP_MEM_START)ul'; \
 		expected_mem_size='$(LLAMA_DIRECT_MAP_MEM_SIZE)ul'; \
 		expected_build_tools='ON'; \
+		expected_build_tests='ON'; \
 		expected_openssl='OFF'; \
 		if [ "$$cached_sysroot" != "$(LLAMA_RISCV_SYSROOT)" ] || \
 		   [ "$$cached_phys_base" != "$$expected_phys_base" ] || \
 		   [ "$$cached_mem_size" != "$$expected_mem_size" ] || \
 		   [ "$$cached_build_tools" != "$$expected_build_tools" ] || \
+		   [ "$$cached_build_tests" != "$$expected_build_tests" ] || \
 		   [ "$$cached_openssl" != "$$expected_openssl" ]; then \
 			echo "Reconfiguring llama.cpp RISC-V build due to cache mismatch..."; \
 			rm -rf "$(TARGET_BUILD_DIR)"; \
@@ -315,10 +333,10 @@ target-configure: | source-ready
 		$(CMAKE) -S $(LLAMA_CPP_HOME) -B $(TARGET_BUILD_DIR) $(TARGET_CMAKE_ARGS); \
 	fi
 
-$(TARGET_SIMPLE_BIN) $(TARGET_SIMPLE_XSAI_BIN) $(TARGET_BENCH_BIN) $(TARGET_BATCHED_BENCH_BIN): $(TARGET_TOOLS_STAMP)
+$(TARGET_SIMPLE_BIN) $(TARGET_SIMPLE_XSAI_BIN) $(TARGET_BENCH_BIN) $(TARGET_BATCHED_BENCH_BIN) $(TARGET_TEST_BACKEND_OPS_BIN): $(TARGET_TOOLS_STAMP)
 	@test -x "$@"
 
-riscv: $(TARGET_SIMPLE_BIN) $(TARGET_SIMPLE_XSAI_BIN) $(TARGET_BENCH_BIN) $(TARGET_BATCHED_BENCH_BIN)
+riscv: $(TARGET_SIMPLE_BIN) $(TARGET_SIMPLE_XSAI_BIN) $(TARGET_BENCH_BIN) $(TARGET_BATCHED_BENCH_BIN) $(TARGET_TEST_BACKEND_OPS_BIN)
 
 $(MODEL_SOURCE_FILE): | $(MODEL_DIR)
 	@if [ -n "$(MODEL_SOURCE_URL)" ]; then \
@@ -410,6 +428,9 @@ $(ROOTFS_BENCH_BIN): $(TARGET_BENCH_BIN)
 $(ROOTFS_BATCHED_BENCH_BIN): $(TARGET_BATCHED_BENCH_BIN)
 	$(call install_rootfs_bin,$(TARGET_BATCHED_BENCH_BIN),$(ROOTFS_BATCHED_BENCH_BIN))
 
+$(ROOTFS_TEST_BACKEND_OPS_BIN): $(TARGET_TEST_BACKEND_OPS_BIN)
+	$(call install_rootfs_bin,$(TARGET_TEST_BACKEND_OPS_BIN),$(ROOTFS_TEST_BACKEND_OPS_BIN))
+
 $(ROOTFS_WRAPPER): $(ROOTFS_WRAPPER_SRC)
 	@mkdir -p $(ROOTFS_BUILD_DIR)
 	install -m 755 $(ROOTFS_WRAPPER_SRC) $@
@@ -421,7 +442,7 @@ $(ROOTFS_MODEL_FILE): $(MODEL_READY_FILE) | $(ROOTFS_BUILD_DIR)
 
 install-model: $(ROOTFS_MODEL_FILE)
 
-install: $(ROOTFS_SIMPLE_BIN) $(ROOTFS_SIMPLE_XSAI_BIN) $(ROOTFS_BENCH_BIN) $(ROOTFS_BATCHED_BENCH_BIN) $(ROOTFS_WRAPPER) install-model
+install: $(ROOTFS_SIMPLE_BIN) $(ROOTFS_SIMPLE_XSAI_BIN) $(ROOTFS_BENCH_BIN) $(ROOTFS_BATCHED_BENCH_BIN) $(ROOTFS_TEST_BACKEND_OPS_BIN) $(ROOTFS_WRAPPER) install-model
 
 rootfs: install
 
@@ -440,9 +461,20 @@ run-user: $(TARGET_SIMPLE_BIN) $(MODEL_READY_FILE)
 	fi
 	$(QEMU_HOME)/build/qemu-riscv64 -cpu $(QEMU_USER_CPU_FLAGS) -L $(RISCV_SYSROOT) $(TARGET_SIMPLE_BIN) -m $(RUN_MODEL) "$(RUN_PROMPT)" $(RUN_ARGS)
 
+test-backend-ops-user: $(TARGET_TEST_BACKEND_OPS_BIN)
+	@if [ ! -x "$(QEMU_HOME)/build/qemu-riscv64" ]; then \
+		echo "error: qemu-riscv64 not found at $(QEMU_HOME)/build/qemu-riscv64" >&2; \
+		exit 1; \
+	fi
+	@if [ -z "$(RISCV_SYSROOT)" ]; then \
+		echo "error: RISCV_SYSROOT is empty; ensure riscv64-unknown-linux-gnu-gcc -print-sysroot works" >&2; \
+		exit 1; \
+	fi
+	XSAI_ALLOC_MODE=malloc $(QEMU_HOME)/build/qemu-riscv64 -cpu $(QEMU_USER_CPU_FLAGS) -L $(RISCV_SYSROOT) $(TARGET_TEST_BACKEND_OPS_BIN) $(TEST_BACKEND_OPS_ARGS)
+
 clean:
 	rm -rf $(HOST_BUILD_DIR) $(TARGET_BUILD_DIR)
-	rm -f $(ROOTFS_SIMPLE_BIN) $(ROOTFS_SIMPLE_XSAI_BIN) $(ROOTFS_BENCH_BIN) $(ROOTFS_BATCHED_BENCH_BIN) $(ROOTFS_WRAPPER) $(ROOTFS_MODEL_FILE)
+	rm -f $(ROOTFS_SIMPLE_BIN) $(ROOTFS_SIMPLE_XSAI_BIN) $(ROOTFS_BENCH_BIN) $(ROOTFS_BATCHED_BENCH_BIN) $(ROOTFS_TEST_BACKEND_OPS_BIN) $(ROOTFS_WRAPPER) $(ROOTFS_MODEL_FILE)
 
 distclean: clean
 	rm -rf $(MODELS_DIR)

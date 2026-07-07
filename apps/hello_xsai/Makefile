@@ -1,5 +1,5 @@
 NAME = hello_xsai
-SRCS = hello_xsai.c auto_test.c ggml_ame_gemm_tile_i8_i32_bT.c mem.c mem_test.c
+SRCS = hello_xsai.c ame_gemm_smoke.c auto_test.c ggml_ame_gemm_tile_i8_i32_bT.c mem.c mem_test.c
 STATIC_DEBUG ?= 1
 
 THIS_MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -26,10 +26,14 @@ AME_FEATURE =
 
 RESERVED_PHYS_BASE_ADDR ?= 0x100000000UL
 RESERVED_MEMORY_SIZE    ?= 0x180000000UL
+AME_DISABLE_ZERO_FAST_PATH ?= 0
+AME_ENABLE_MZERO_ACC ?= 0
 
 CFLAGS += $(AME_TARGET) $(AME_ARCH) $(AME_FEATURE)
 CFLAGS += -DRESERVED_PHYS_BASE_ADDR=$(RESERVED_PHYS_BASE_ADDR)
 CFLAGS += -DRESERVED_MEMORY_SIZE=$(RESERVED_MEMORY_SIZE)
+CFLAGS += $(if $(filter 1 true TRUE yes YES,$(AME_DISABLE_ZERO_FAST_PATH)),-DAME_DISABLE_ZERO_FAST_PATH=1,)
+CFLAGS += $(if $(filter 1 true TRUE yes YES,$(AME_ENABLE_MZERO_ACC)),-DAME_ENABLE_MZERO_ACC=1,)
 LDFLAGS += $(AME_TARGET) $(AME_ARCH) $(AME_FEATURE)
 
 include $(RISCV_ROOTFS_HOME)/Makefile.compile

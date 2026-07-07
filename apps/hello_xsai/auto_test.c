@@ -32,9 +32,9 @@ void reference_gemm_i8_i32_bT(
 }
 
 int auto_test() {
-    const int M = AME_TILE_M;  // 128
-    const int K = AME_TILE_K;  // 64
-    const int N = AME_TILE_N;  // 128
+    const int M = AME_TILE_M;
+    const int K = AME_TILE_K;
+    const int N = AME_TILE_N;
     // INIT();
     printf("Testing AME GEMM: C(%dx%d) = A(%dx%d) * B^T(%dx%d)\n", M, N, M, K, N, K);
     printf("Note: B is transposed, so B[n,k] is stored at B[n*K + k]\n\n");
@@ -102,7 +102,11 @@ int auto_test() {
         
         // Compute AME result
         // if(t==20){nemu_signal(NOTIFY_PROFILER);}
+        printf("[ame-trace] test %d before ggml_ame_gemm_tile_i8_i32_bT\n", t);
+        fflush(stdout);
         ggml_ame_gemm_tile_i8_i32_bT(A, B, C_ame);
+        printf("[ame-trace] test %d after ggml_ame_gemm_tile_i8_i32_bT\n", t);
+        fflush(stdout);
         // if(t==20){nemu_signal(NOTIFY_PROFILE_EXIT);}
         // Compare results
         int errors = 0;

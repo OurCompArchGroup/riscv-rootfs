@@ -109,6 +109,13 @@ setup_dsid_cgroup()
   echo 2 > "$CGROUP_ROOT"/dsid/test-2/dsid.dsid-set || true
 }
 
+probe_ame_hw()
+{
+  if [ -x /bin/ame_hw_probe ]; then
+    /bin/ame_hw_probe || warn "AME hardware probe failed"
+  fi
+}
+
 dump_thp_counters()
 {
   log "THP counters $1 llama:"
@@ -159,6 +166,7 @@ env_init()
   mount_model_disk
   configure_perf_and_thp
   setup_dsid_cgroup
+  probe_ame_hw
 
   log "model path: $LLAMA_MODEL"
 }
