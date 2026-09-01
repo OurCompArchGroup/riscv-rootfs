@@ -5,7 +5,6 @@ file /bin/gemm_precomp ${RISCV_ROOTFS_HOME}/rootfsimg/build/gemm_precomp 755 0 0
 file /bin/hello_xsai ${RISCV_ROOTFS_HOME}/rootfsimg/build/hello_xsai 755 0 0
 file /bin/after_workload ${RISCV_ROOTFS_HOME}/rootfsimg/build/after_workload 755 0 0
 file /bin/pmu_test ${RISCV_ROOTFS_HOME}/rootfsimg/build/pmu_test 755 0 0
-file /bin/ame_panel_probe ${RISCV_ROOTFS_HOME}/rootfsimg/build/ame_panel_probe 755 0 0
 file /bin/ame_hw_probe ${RISCV_ROOTFS_HOME}/rootfsimg/build/ame_hw_probe 755 0 0
 file /bin/llama-simple ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-simple 755 0 0
 file /bin/llama-simple-xsai ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-simple-xsai 755 0 0
