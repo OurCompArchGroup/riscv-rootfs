@@ -15,6 +15,10 @@ RISCV ?= /opt/riscv
 export PATH := $(RISCV)/bin:$(PATH)
 
 REPO_PATH := $(APP_DIR)/repo
+LLAMA_CPP_REPO_URL ?= https://github.com/OurCompArchGroup/llama.cpp.git
+# Pinned AME source revision: master merge 97308c32 (feat/ame-matmul-opt + master).
+# Contains the Zames proposal-12 AME kernels validated by the NEMU gate on 2026-09-01.
+LLAMA_CPP_REPO_REF ?= 97308c32265e8602f5ae8a71346ce93dc29cfdb5
 LLAMA_CPP_DEFAULT_HOME := $(XS_PROJECT_ROOT)/software/llama.cpp
 ifneq ($(wildcard $(LLAMA_CPP_DEFAULT_HOME)/CMakeLists.txt),)
 LLAMA_CPP_HOME ?= $(LLAMA_CPP_DEFAULT_HOME)
@@ -217,7 +221,9 @@ source-ready: $(if $(filter $(REPO_PATH),$(LLAMA_CPP_HOME)),$(REPO_PATH)/CMakeLi
 	fi
 
 $(REPO_PATH)/CMakeLists.txt:
-	git clone --depth 1 https://github.com/OurCompArchGroup/llama.cpp.git $(REPO_PATH)
+	git clone --depth 1 --no-checkout $(LLAMA_CPP_REPO_URL) $(REPO_PATH)
+	git -C $(REPO_PATH) fetch --depth 1 origin $(LLAMA_CPP_REPO_REF)
+	git -C $(REPO_PATH) checkout -q --detach $(LLAMA_CPP_REPO_REF)
 
 $(MODELS_DIR):
 	mkdir -p $@
