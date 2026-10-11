@@ -149,6 +149,8 @@ TARGET_CMAKE_ARGS = \
 	-DLLAMA_BUILD_TOOLS=ON \
 	-DLLAMA_BUILD_EXAMPLES=ON \
 	-DGGML_RV_AME=ON \
+	-DGGML_RV_AME_MEM_TRACE=$(GGML_RV_AME_MEM_TRACE_CMAKE) \
+	-DGGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT=$(GGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT_CMAKE) \
 	-DGGML_RV_ZFH=ON \
 	-DGGML_RV_ZVFH=ON \
 	-DGGML_RVV=ON \
@@ -161,6 +163,15 @@ TARGET_CMAKE_ARGS = \
 # Defaults come from mk/memory.mk (included above).
 LLAMA_DIRECT_MAP_MEM_START ?= $(XSAI_DIRECT_MAP_MEM_START)
 LLAMA_DIRECT_MAP_MEM_SIZE  ?= $(XSAI_DIRECT_MAP_MEM_SIZE)
+
+# Keep AME acceleration enabled while making its memory-trace instrumentation
+# an explicit build-time choice. The normal workload build must not emit the
+# trace pseudo-instructions or pay their synchronization cost.
+GGML_RV_AME_MEM_TRACE ?= OFF
+GGML_RV_AME_MEM_TRACE_CMAKE := $(if $(filter 1 ON TRUE YES on true yes,$(GGML_RV_AME_MEM_TRACE)),ON,OFF)
+
+GGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT ?= OFF
+GGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT_CMAKE := $(if $(filter 1 ON TRUE YES on true yes,$(GGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT)),ON,OFF)
 
 ifneq ($(LLAMA_DIRECT_MAP_MEM_START),)
 TARGET_CMAKE_ARGS += \
@@ -198,6 +209,8 @@ print-config:
 	@echo "QUANT_TYPE=$(QUANT_TYPE)"
 	@echo "RISCV_SYSROOT=$(RISCV_SYSROOT)"
 	@echo "LLAMA_RISCV_SYSROOT=$(LLAMA_RISCV_SYSROOT)"
+	@echo "GGML_RV_AME_MEM_TRACE=$(GGML_RV_AME_MEM_TRACE_CMAKE)"
+	@echo "GGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT=$(GGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT_CMAKE)"
 	@echo "LLAMA_DIRECT_MAP_MEM_START=$(LLAMA_DIRECT_MAP_MEM_START)"
 	@echo "LLAMA_DIRECT_MAP_MEM_SIZE=$(LLAMA_DIRECT_MAP_MEM_SIZE)"
 
@@ -298,15 +311,21 @@ target-configure: | source-ready
 		cached_mem_size=$$(grep '^RESERVED_MEMORY_SIZE:' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_build_tools=$$(grep '^LLAMA_BUILD_TOOLS:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_openssl=$$(grep '^LLAMA_OPENSSL:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
+		cached_ame_mem_trace=$$(grep '^GGML_RV_AME_MEM_TRACE:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
+		cached_sim_window=$$(grep '^GGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		expected_phys_base='$(LLAMA_DIRECT_MAP_MEM_START)ul'; \
 		expected_mem_size='$(LLAMA_DIRECT_MAP_MEM_SIZE)ul'; \
 		expected_build_tools='ON'; \
 		expected_openssl='OFF'; \
+		expected_ame_mem_trace='$(GGML_RV_AME_MEM_TRACE_CMAKE)'; \
+		expected_sim_window='$(GGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT_CMAKE)'; \
 		if [ "$$cached_sysroot" != "$(LLAMA_RISCV_SYSROOT)" ] || \
 		   [ "$$cached_phys_base" != "$$expected_phys_base" ] || \
 		   [ "$$cached_mem_size" != "$$expected_mem_size" ] || \
 		   [ "$$cached_build_tools" != "$$expected_build_tools" ] || \
-		   [ "$$cached_openssl" != "$$expected_openssl" ]; then \
+		   [ "$$cached_openssl" != "$$expected_openssl" ] || \
+		   [ "$$cached_ame_mem_trace" != "$$expected_ame_mem_trace" ] || \
+		   [ "$$cached_sim_window" != "$$expected_sim_window" ]; then \
 			echo "Reconfiguring llama.cpp RISC-V build due to cache mismatch..."; \
 			rm -rf "$(TARGET_BUILD_DIR)"; \
 		fi; \

@@ -26,6 +26,8 @@ XSAI_DUMP_THP ?= 1
 XSAI_TRACE_WORKLOAD ?= 1
 XSAI_GGML_AME_LOG ?= 0
 XSAI_GGML_AME_PACKED_Q8 ?= 1
+XSAI_CHECKPOINT_HERE_BEFORE ?=
+XSAI_GOOD_TRAP_BEFORE ?=
 
 .PHONY: rootfsimg xsai-init-config $(APPS_DIR) clean
 
@@ -44,6 +46,8 @@ xsai-init-config:
 	  printf "TRACE_WORKLOAD='%s'\n" "$(XSAI_TRACE_WORKLOAD)"; \
 	  printf "GGML_AME_LOG='%s'\n" "$(XSAI_GGML_AME_LOG)"; \
 	  printf "GGML_AME_PACKED_Q8='%s'\n" "$(XSAI_GGML_AME_PACKED_Q8)"; \
+	  printf "CHECKPOINT_HERE_BEFORE='%s'\n" "$(XSAI_CHECKPOINT_HERE_BEFORE)"; \
+	  printf "GOOD_TRAP_BEFORE='%s'\n" "$(XSAI_GOOD_TRAP_BEFORE)"; \
 	} > rootfsimg/build/xsai-init.conf
 
 $(APPS_DIR): %:

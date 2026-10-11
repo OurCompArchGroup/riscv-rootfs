@@ -39,6 +39,12 @@ run_llama_fake_bench_suite()
   export GGML_AME_LOG="${GGML_AME_LOG:-0}"
   export GGML_AME_PACKED_Q8="${GGML_AME_PACKED_Q8:-1}"
 
+  # Select the simulation window by exact compute graph node names.
+  # CHECKPOINT_HERE and GOOD_TRAP are triggered before their selected nodes execute.
+  # Effective only when 'GGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT' is defined at compile time.
+  export CHECKPOINT_HERE_BEFORE="${CHECKPOINT_HERE_BEFORE:-}"
+  export GOOD_TRAP_BEFORE="${GOOD_TRAP_BEFORE:-}"
+
   if [ "${TRACE_WORKLOAD:-1}" = 1 ]; then
     set -x
   fi
