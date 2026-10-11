@@ -38,6 +38,9 @@ run_llama_fake_bench_suite()
 
   export GGML_AME_LOG="${GGML_AME_LOG:-0}"
   export GGML_AME_PACKED_Q8="${GGML_AME_PACKED_Q8:-1}"
+  export GGML_XSAI_MEM_TRACE_NAME="${GGML_MEM_TRACE_NAME:-*}"
+  export GGML_XSAI_MEM_TRACE_OP="${GGML_MEM_TRACE_OP:-*}"
+  export GGML_XSAI_MEM_TRACE_LAYER="${GGML_MEM_TRACE_LAYER:-1}"
 
   # Select the simulation window by exact compute graph node names.
   # CHECKPOINT_HERE and GOOD_TRAP are triggered before their selected nodes execute.

@@ -26,6 +26,9 @@ XSAI_DUMP_THP ?= 1
 XSAI_TRACE_WORKLOAD ?= 1
 XSAI_GGML_AME_LOG ?= 0
 XSAI_GGML_AME_PACKED_Q8 ?= 1
+XSAI_GGML_MEM_TRACE_NAME ?= *
+XSAI_GGML_MEM_TRACE_OP ?= *
+XSAI_GGML_MEM_TRACE_LAYER ?= 1
 XSAI_CHECKPOINT_HERE_BEFORE ?=
 XSAI_GOOD_TRAP_BEFORE ?=
 
@@ -46,6 +49,9 @@ xsai-init-config:
 	  printf "TRACE_WORKLOAD='%s'\n" "$(XSAI_TRACE_WORKLOAD)"; \
 	  printf "GGML_AME_LOG='%s'\n" "$(XSAI_GGML_AME_LOG)"; \
 	  printf "GGML_AME_PACKED_Q8='%s'\n" "$(XSAI_GGML_AME_PACKED_Q8)"; \
+	  printf "GGML_MEM_TRACE_NAME='%s'\n" "$(XSAI_GGML_MEM_TRACE_NAME)"; \
+	  printf "GGML_MEM_TRACE_OP='%s'\n" "$(XSAI_GGML_MEM_TRACE_OP)"; \
+	  printf "GGML_MEM_TRACE_LAYER='%s'\n" "$(XSAI_GGML_MEM_TRACE_LAYER)"; \
 	  printf "CHECKPOINT_HERE_BEFORE='%s'\n" "$(XSAI_CHECKPOINT_HERE_BEFORE)"; \
 	  printf "GOOD_TRAP_BEFORE='%s'\n" "$(XSAI_GOOD_TRAP_BEFORE)"; \
 	} > rootfsimg/build/xsai-init.conf
