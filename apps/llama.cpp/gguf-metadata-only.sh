@@ -18,7 +18,9 @@ set -euo pipefail
 # - normal inference or correctness checks
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-repo_dir="${LLAMA_REPO_DIR:-$script_dir/repo}"
+xsai_env_root="${XSAI_ENV_ROOT:-$(cd -- "$script_dir/../../../.." && pwd)}"
+# Explicit legacy aliases remain supported; never fall back by existence.
+repo_dir="${LLAMA_CPP_SRC:-${LLAMA_CPP_HOME:-${LLAMA_REPO_DIR:-$xsai_env_root/software/llama.cpp}}}"
 build_dir="${LLAMA_BUILD_DIR:-$script_dir/build-host}"
 tmp_dir="${TMPDIR:-/tmp}"
 helper_src="$tmp_dir/gguf_meta_only_helper.cpp"
@@ -49,6 +51,8 @@ examples:
   gguf-metadata-only.sh -o /tmp/model.gguf.om /path/model.gguf
 
 notes:
+  - source defaults to software/llama.cpp; set LLAMA_CPP_SRC for development
+  - LLAMA_CPP_HOME / LLAMA_REPO_DIR are explicit legacy source aliases
   - outputs are intended for `llama-bench --fake-like`
   - outputs are metadata-only and will fail with normal `-m`
 USAGE
@@ -60,7 +64,7 @@ die() {
 }
 
 build_helper() {
-  [[ -d "$repo_dir/ggml/include" ]] || die "repo headers not found under $repo_dir"
+  [[ -d "$repo_dir/ggml/include" ]] || die "source headers missing at $repo_dir; acquire locked software/llama.cpp via the parent workspace or set LLAMA_CPP_SRC explicitly"
   [[ -f "$build_dir/ggml/src/libggml.a" ]] || die "missing $build_dir/ggml/src/libggml.a; build-host is required"
   [[ -f "$build_dir/ggml/src/libggml-base.a" ]] || die "missing $build_dir/ggml/src/libggml-base.a; build-host is required"
   [[ -f "$build_dir/ggml/src/libggml-cpu.a" ]] || die "missing $build_dir/ggml/src/libggml-cpu.a; build-host is required"

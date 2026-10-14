@@ -1,0 +1,5 @@
+if(NOT FIXTURE_MISSING_CONTRACT)
+    add_library(ggml-cpu STATIC xsai_alloc.c)
+    add_library(ggml-cpu-variant STATIC "${CMAKE_CURRENT_SOURCE_DIR}/xsai_alloc.c")
+endif()
+add_library(unrelated STATIC xsai_alloc.c)

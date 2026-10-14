@@ -6,6 +6,7 @@
 #   llama-bf16-test-ops    small BF16 smoke: CPY, 64x64x32 MUL_MAT, softmax.
 #   llama-fake-bench-suite default ci workload: gate + fake-like llama-bench.
 #   llama-bench / llama-simple(-xsai) / llama-xsai
+#   mnn-smoke / ncnn-smoke (opt-in app + additive manifest)
 #   hello_xsai / gemm_precomp / pmu_test
 #
 # Removed 2026-09-01: one-off experiment harnesses (BF16 whole-K/TR sweeps,
@@ -220,6 +221,83 @@ run_llama_fake_bench_suite()
   return "$status"
 }
 
+run_mnn_smoke()
+(
+  for input in /bin/MNNV2Basic.out /root/mobilenet-v2-int8.mnn /root/mnn-input-0.txt; do
+    if [ ! -f "$input" ]; then
+      echo "[xsai-workload] MNN_SMOKE_FAIL missing $input"
+      return 1
+    fi
+  done
+  # MNN writes beside argv[0]. Keep generated outputs away from /bin.
+  scratch=$(mktemp -d /tmp/mnn-smoke.XXXXXX) || return 1
+  cp /bin/MNNV2Basic.out "$scratch/MNNV2Basic.out" || return 1
+  cp /root/mnn-input-0.txt "$scratch/input_0.txt" || return 1
+  cd "$scratch" || return 1
+  export XSAI_MNN_AME="${XSAI_MNN_AME:-0}"
+  if run_workload_cmd "$scratch/MNNV2Basic.out" /root/mobilenet-v2-int8.mnn \
+      "${XSAI_MNN_LOOPS:-3}" "${XSAI_MNN_MASK:-0}" 0 1 0; then
+    :
+  else
+    rc=$?
+    echo "[xsai-workload] MNN_SMOKE_FAIL rc=$rc"
+    return "$rc"
+  fi
+  if [ ! -s output.txt ]; then
+    echo "[xsai-workload] MNN_SMOKE_FAIL missing output tensor"
+    return 1
+  fi
+  argmax=$(awk '{for(i=1;i<=NF;i++){if(n==0 || $i>m){m=$i;idx=n} n++}} END{print idx+0}' output.txt)
+  if [ -n "${XSAI_MNN_EXPECTED_ARGMAX:-}" ] && [ "$argmax" != "$XSAI_MNN_EXPECTED_ARGMAX" ]; then
+    echo "[xsai-workload] MNN_SMOKE_FAIL argmax=$argmax expected=$XSAI_MNN_EXPECTED_ARGMAX"
+    return 1
+  fi
+  echo "[xsai-workload] MNN_SMOKE_PASS argmax=$argmax output=$scratch/output.txt"
+)
+
+run_ncnn_smoke()
+(
+  if [ ! -x /bin/ncnn_ame_smoke ]; then
+    echo "[xsai-workload] NCNN_AME_SMOKE_FAIL missing /bin/ncnn_ame_smoke"
+    return 127
+  fi
+  scratch=$(mktemp -d /tmp/ncnn-smoke.XXXXXX) || return 1
+  if run_workload_cmd /bin/ncnn_ame_smoke ref "$scratch/ref.txt" "$scratch/ref-bf16.txt"; then
+    :
+  else
+    rc=$?
+    echo "[xsai-workload] NCNN_AME_SMOKE_FAIL reference rc=$rc"
+    return "$rc"
+  fi
+  if (
+    export XSAI_NCNN_AME=1 XSAI_NCNN_AME_BF16=1
+    run_workload_cmd /bin/ncnn_ame_smoke ame "$scratch/ame.txt" "$scratch/ame-bf16.txt"
+  ); then
+    :
+  else
+    rc=$?
+    echo "[xsai-workload] NCNN_AME_SMOKE_FAIL AME rc=$rc"
+    return "$rc"
+  fi
+  if [ ! -s "$scratch/ref.txt" ] || [ ! -s "$scratch/ame.txt" ] || ! cmp -s "$scratch/ref.txt" "$scratch/ame.txt"; then
+    echo "[xsai-workload] NCNN_AME_SMOKE_FAIL int8 outputs differ or are empty"
+    return 1
+  fi
+  if [ "${XSAI_NCNN_TEST:-0}" = 1 ]; then
+    if (
+      export XSAI_NCNN_AME=1
+      run_workload_cmd /bin/ncnn_test_convolution_3
+    ); then
+      echo "[xsai-workload] NCNN_TEST_PASS"
+    else
+      rc=$?
+      echo "[xsai-workload] NCNN_TEST_FAIL rc=$rc"
+      return "$rc"
+    fi
+  fi
+  echo "[xsai-workload] NCNN_AME_SMOKE_PASS output=$scratch"
+)
+
 run_selected_workload()
 {
   case "$WORKLOAD" in
@@ -286,6 +364,22 @@ run_selected_workload()
     llama-xsai)
       log "launching llama-xsai"
       if run_llama_xsai; then
+        WORKLOAD_STATUS=0
+      else
+        WORKLOAD_STATUS=$?
+      fi
+      ;;
+    mnn-smoke)
+      log "launching mnn smoke"
+      if run_mnn_smoke; then
+        WORKLOAD_STATUS=0
+      else
+        WORKLOAD_STATUS=$?
+      fi
+      ;;
+    ncnn-smoke)
+      log "launching ncnn smoke"
+      if run_ncnn_smoke; then
         WORKLOAD_STATUS=0
       else
         WORKLOAD_STATUS=$?

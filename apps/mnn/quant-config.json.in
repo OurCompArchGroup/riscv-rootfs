@@ -1,0 +1,10 @@
+{
+    "format": "rgb",
+    "mean": [0.0, 0.0, 0.0],
+    "normal": [0.00392156863, 0.00392156863, 0.00392156863],
+    "width": 224,
+    "height": 224,
+    "path": "@CALIB_DIR@",
+    "used_image_num": 8,
+    "weight_quantize_method": "MAX_ABS"
+}
