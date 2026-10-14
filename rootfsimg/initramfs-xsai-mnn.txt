@@ -1,0 +1,7 @@
+# Add to initramfs-disk-xsai.txt with XSAI_ROOTFS_EXTRA_APPS=mnn.
+file /bin/MNNV2Basic.out ${RISCV_ROOTFS_HOME}/rootfsimg/build/MNNV2Basic.out 755 0 0
+file /bin/GetMNNInfo ${RISCV_ROOTFS_HOME}/rootfsimg/build/GetMNNInfo 755 0 0
+file /bin/nemu-signal ${RISCV_ROOTFS_HOME}/rootfsimg/build/nemu-signal 755 0 0
+file /bin/test_ame_kernels ${RISCV_ROOTFS_HOME}/rootfsimg/build/test_ame_kernels 755 0 0
+file /root/mobilenet-v2-int8.mnn ${RISCV_ROOTFS_HOME}/rootfsimg/build/mobilenet-v2-int8.mnn 644 0 0
+file /root/mnn-input-0.txt ${RISCV_ROOTFS_HOME}/rootfsimg/build/mnn-input-0.txt 644 0 0

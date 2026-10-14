@@ -11,6 +11,9 @@
 !*.txt
 !*.md
 !*.gguf.om
+!*.cmake
+!*.py
+!*.json.in
 !riscv-lib-paths.mk
 repo/
 build/

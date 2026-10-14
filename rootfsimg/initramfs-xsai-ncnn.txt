@@ -1,0 +1,5 @@
+# Add to initramfs-disk-xsai.txt with XSAI_ROOTFS_EXTRA_APPS=ncnn.
+# The differential smoke is self-contained; no local model cache is required.
+file /bin/ncnn_ame_smoke ${RISCV_ROOTFS_HOME}/rootfsimg/build/ncnn_ame_smoke 755 0 0
+file /bin/ncnn_run_model ${RISCV_ROOTFS_HOME}/rootfsimg/build/ncnn_run_model 755 0 0
+file /bin/ncnn_test_convolution_3 ${RISCV_ROOTFS_HOME}/rootfsimg/build/ncnn_test_convolution_3 755 0 0

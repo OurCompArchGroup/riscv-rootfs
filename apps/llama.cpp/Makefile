@@ -2,7 +2,7 @@ NAME = llama-simple
 
 THIS_MAKEFILE := $(abspath $(lastword $(MAKEFILE_LIST)))
 APP_DIR := $(patsubst %/,%,$(dir $(THIS_MAKEFILE)))
-XSAI_ENV_ROOT := $(abspath $(APP_DIR)/../../../..)
+XSAI_ENV_ROOT ?= $(abspath $(APP_DIR)/../../../..)
 XSAI_RESOLVE_RISCV_ENV := $(XSAI_ENV_ROOT)/scripts/resolve-riscv-env.sh
 # Memory layout (QEMU size, kernel RAM, XSAI DMA pool)
 include $(XSAI_ENV_ROOT)/mk/memory.mk
@@ -11,20 +11,31 @@ XS_PROJECT_ROOT ?= $(XSAI_ENV_ROOT)
 RISCV_ROOTFS_HOME ?= $(XS_PROJECT_ROOT)/firmware/riscv-rootfs
 ROOTFS_BUILD_DIR ?= $(RISCV_ROOTFS_HOME)/rootfsimg/build
 ROOTFS_INTERPRETER ?= /lib/ld-linux-riscv64-lp64d.so.1
+ROOTFS_RPATH ?= /lib
+ROOTFS_LINKER_FLAGS ?= -Wl,--dynamic-linker=$(ROOTFS_INTERPRETER) -Wl,-rpath,$(ROOTFS_RPATH)
 RISCV ?= /opt/riscv
 export PATH := $(RISCV)/bin:$(PATH)
 
-REPO_PATH := $(APP_DIR)/repo
-LLAMA_CPP_REPO_URL ?= https://github.com/OurCompArchGroup/llama.cpp.git
-# Pinned AME source revision: master merge 97308c32 (feat/ame-matmul-opt + master).
-# Contains the Zames proposal-12 AME kernels validated by the NEMU gate on 2026-09-01.
-LLAMA_CPP_REPO_REF ?= 97308c32265e8602f5ae8a71346ce93dc29cfdb5
-LLAMA_CPP_DEFAULT_HOME := $(XS_PROJECT_ROOT)/software/llama.cpp
-ifneq ($(wildcard $(LLAMA_CPP_DEFAULT_HOME)/CMakeLists.txt),)
-LLAMA_CPP_HOME ?= $(LLAMA_CPP_DEFAULT_HOME)
-else
-LLAMA_CPP_HOME ?= $(REPO_PATH)
-endif
+# Source acquisition/version locks belong to the parent workspace. Never select
+# another tree just because the canonical source is absent.
+# *_HOME remain explicit legacy aliases; *_SRC take precedence.
+LLAMA_CPP_DEFAULT_HOME := $(XSAI_ENV_ROOT)/software/llama.cpp
+LLAMA_CPP_SRC ?= $(or $(LLAMA_CPP_HOME),$(LLAMA_CPP_DEFAULT_HOME))
+override LLAMA_CPP_SRC := $(abspath $(LLAMA_CPP_SRC))
+override LLAMA_CPP_HOME := $(LLAMA_CPP_SRC)
+MNN_SRC ?= $(or $(MNN_HOME),$(XSAI_ENV_ROOT)/software/MNN)
+override MNN_SRC := $(abspath $(MNN_SRC))
+override MNN_HOME := $(MNN_SRC)
+# Explicit shared allocator dependency, also used by the host build.
+XSAI_ALLOC_SRC ?= $(MNN_SRC)/source/backend/cpu/ame/xsai_alloc.c
+override XSAI_ALLOC_SRC := $(abspath $(XSAI_ALLOC_SRC))
+XSAI_ALLOC_HEADER ?= $(dir $(XSAI_ALLOC_SRC))xsai_alloc.h
+override XSAI_ALLOC_HEADER := $(abspath $(XSAI_ALLOC_HEADER))
+XSAI_ALLOC_CMAKE_HOOK := $(APP_DIR)/cmake/use-mnn-allocator.cmake
+XSAI_ALLOC_CMAKE_ARGS = \
+	-DCMAKE_PROJECT_INCLUDE=$(XSAI_ALLOC_CMAKE_HOOK) \
+	-DXSAI_ALLOC_SRC:FILEPATH=$(XSAI_ALLOC_SRC) \
+	-DXSAI_ALLOC_HEADER:FILEPATH=$(XSAI_ALLOC_HEADER)
 
 CMAKE ?= cmake
 NPROC ?= $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 8)
@@ -36,10 +47,10 @@ HOST_CXXFLAGS ?=
 HOST_EFFECTIVE_CFLAGS := $(strip $(HOST_CFLAGS) $(HOST_NO_CET_FLAG)) -Wno-gnu-zero-variadic-macro-arguments
 HOST_EFFECTIVE_CXXFLAGS := $(strip $(HOST_CXXFLAGS) $(HOST_NO_CET_FLAG)) -Wno-gnu-zero-variadic-macro-arguments
 QEMU_HOME ?= $(XS_PROJECT_ROOT)/qemu
-QEMU_USER_CPU_FLAGS ?= rv64,v=true,vlen=128,h=true,zvfh=true,zvfhmin=true,x-matrix=true,rlen=512,mlen=65536,melen=32
+QEMU_USER_CPU_FLAGS ?= rv64,v=true,vlen=128,h=true,zvfh=true,zvfhmin=true,zvfbfmin=true,zvfbfwma=true,x-matrix=true,rlen=512,mlen=65536,melen=32
 
-HOST_BUILD_DIR := $(APP_DIR)/build-host
-TARGET_BUILD_DIR := $(APP_DIR)/build-riscv
+HOST_BUILD_DIR ?= $(APP_DIR)/build-host
+TARGET_BUILD_DIR ?= $(APP_DIR)/build-riscv
 HOST_TOOLS_STAMP := $(HOST_BUILD_DIR)/.tools-ready
 TARGET_TOOLS_STAMP := $(TARGET_BUILD_DIR)/.tools-built
 HOST_CONVERT_BIN := $(HOST_BUILD_DIR)/bin/llama-convert-llama2c-to-ggml
@@ -115,6 +126,8 @@ TEST_BACKEND_OPS_ARGS ?= test -o MUL_MAT --buft RISCV_AME -p 'type_a=q8_0,type_b
 RISCV_TRIPLE ?= riscv64-unknown-linux-gnu
 RISCV_MARCH ?= rv64gc_zba_zicbop
 RISCV_MABI ?= lp64d
+GGML_RV_AME ?= ON
+GGML_RV_ZVFBFWMA ?= OFF
 # cmake cross-compile sysroot: prefer the active env/toolchain sysroot and
 # fall back only if nothing else is available.
 LLAMA_RISCV_SYSROOT ?= $(strip $(or $(RISCV_SYSROOT),$(QEMU_LD_PREFIX),$(shell [ -x "$(XSAI_RESOLVE_RISCV_ENV)" ] && "$(XSAI_RESOLVE_RISCV_ENV)" sysroot 2>/dev/null || true),$(shell $(RISCV_TRIPLE)-gcc -print-sysroot 2>/dev/null),$(RISCV)/sysroot,/opt/riscv/sysroot))
@@ -123,7 +136,7 @@ ifeq ($(strip $(RISCV_SYSROOT)),)
 RISCV_SYSROOT := $(RISCV_SYSROOT_RESOLVED)
 endif
 
-HOST_CMAKE_ARGS = \
+HOST_CMAKE_ARGS = $(XSAI_ALLOC_CMAKE_ARGS) \
 	-DCMAKE_BUILD_TYPE=Release \
 	-DCMAKE_C_COMPILER=$(HOST_CC) \
 	-DCMAKE_CXX_COMPILER=$(HOST_CXX) \
@@ -139,7 +152,7 @@ HOST_CMAKE_ARGS = \
 	-DLLAMA_BUILD_TOOLS=ON \
 	-DLLAMA_BUILD_EXAMPLES=ON
 
-TARGET_CMAKE_ARGS = \
+TARGET_CMAKE_ARGS = $(XSAI_ALLOC_CMAKE_ARGS) \
 	-DCMAKE_BUILD_TYPE=Release \
 	-DCMAKE_C_FLAGS="-Wno-gnu-zero-variadic-macro-arguments" \
     -DCMAKE_CXX_FLAGS="-Wno-gnu-zero-variadic-macro-arguments"\
@@ -158,9 +171,10 @@ TARGET_CMAKE_ARGS = \
 	-DLLAMA_BUILD_SERVER=OFF \
 	-DLLAMA_BUILD_TOOLS=ON \
 	-DLLAMA_BUILD_EXAMPLES=ON \
-	-DGGML_RV_AME=ON \
+	-DGGML_RV_AME=$(GGML_RV_AME) \
 	-DGGML_RV_ZFH=ON \
 	-DGGML_RV_ZVFH=ON \
+	-DGGML_RV_ZVFBFWMA=$(GGML_RV_ZVFBFWMA) \
 	-DGGML_RVV=ON \
 	-DCMAKE_EXE_LINKER_FLAGS="$(ROOTFS_LINKER_FLAGS)" \
 	-DRISCV_SYSROOT=$(LLAMA_RISCV_SYSROOT)
@@ -181,12 +195,15 @@ endif
 
 .DEFAULT_GOAL := $(TARGET_SIMPLE_BIN)
 
-.PHONY: repo source-ready host-tools riscv fetch-model convert-model quantize-model \
+.PHONY: repo source-ready xsai-alloc-sync allocator-ready host-tools riscv fetch-model convert-model quantize-model \
 	prepare-model prepare-stories15m prepare-stories110M install install-model rootfs \
 	run-user test-backend-ops-user print-config clean distclean help
 
 help:
 	@echo "llama.cpp xsai wrapper"
+	@echo "  source-ready / repo: validate selected source and MNN allocator; no downloads"
+	@echo "  sources: LLAMA_CPP_SRC=$(LLAMA_CPP_SRC) MNN_SRC=$(MNN_SRC)"
+	@echo "  *_HOME are legacy override aliases; CMake >= 3.19 is required"
 	@echo "  make -C firmware/riscv-rootfs/apps/llama.cpp print-config"
 	@echo "  make -C firmware/riscv-rootfs/apps/llama.cpp prepare-model"
 	@echo "  make -C firmware/riscv-rootfs/apps/llama.cpp prepare-stories110M"
@@ -194,6 +211,11 @@ help:
 	@echo "  make firmware MODEL_PRESET=stories110M"
 
 print-config:
+	@echo "LLAMA_CPP_SRC=$(LLAMA_CPP_SRC)"
+	@echo "LLAMA_CPP_HOME=$(LLAMA_CPP_HOME)"
+	@echo "MNN_SRC=$(MNN_SRC)"
+	@echo "XSAI_ALLOC_SRC=$(XSAI_ALLOC_SRC)"
+	@echo "XSAI_ALLOC_HEADER=$(XSAI_ALLOC_HEADER)"
 	@echo "MODEL_PRESET=$(MODEL_PRESET)"
 	@echo "MODEL_KIND=$(MODEL_KIND)"
 	@echo "MODEL_NAME=$(MODEL_NAME)"
@@ -210,20 +232,31 @@ print-config:
 	@echo "LLAMA_RISCV_SYSROOT=$(LLAMA_RISCV_SYSROOT)"
 	@echo "LLAMA_DIRECT_MAP_MEM_START=$(LLAMA_DIRECT_MAP_MEM_START)"
 	@echo "LLAMA_DIRECT_MAP_MEM_SIZE=$(LLAMA_DIRECT_MAP_MEM_SIZE)"
+	@echo "GGML_RV_AME=$(GGML_RV_AME)"
+	@echo "GGML_RV_ZVFBFWMA=$(GGML_RV_ZVFBFWMA)"
+	@echo "QEMU_USER_CPU_FLAGS=$(QEMU_USER_CPU_FLAGS)"
 
-repo: $(REPO_PATH)/CMakeLists.txt
+repo: source-ready
 
-source-ready: $(if $(filter $(REPO_PATH),$(LLAMA_CPP_HOME)),$(REPO_PATH)/CMakeLists.txt,)
+# Legacy target name now validates only. CMake substitutes the MNN source on
+# ggml-cpu targets in the build graph; it never writes into LLAMA_CPP_SRC.
+xsai-alloc-sync: allocator-ready
+
+allocator-ready:
+	@for src in "$(XSAI_ALLOC_SRC)" "$(XSAI_ALLOC_HEADER)"; do \
+		test -f "$$src" || { \
+			echo "error: llama.cpp requires the MNN allocator: $$src" >&2; \
+			echo "hint: acquire locked software/MNN via the parent workspace, or set MNN_SRC (or XSAI_ALLOC_SRC/XSAI_ALLOC_HEADER) explicitly" >&2; \
+			exit 1; \
+		}; \
+	done
+
+source-ready: allocator-ready
 	@if [ ! -f "$(LLAMA_CPP_HOME)/CMakeLists.txt" ]; then \
 		echo "error: llama.cpp source not found at $(LLAMA_CPP_HOME)" >&2; \
-		echo "hint: clone to $(LLAMA_CPP_DEFAULT_HOME) or run 'make repo' in this directory" >&2; \
+		echo "hint: acquire the locked source at $(LLAMA_CPP_DEFAULT_HOME) via the parent workspace, or set LLAMA_CPP_SRC=/path/to/llama.cpp explicitly" >&2; \
 		exit 1; \
 	fi
-
-$(REPO_PATH)/CMakeLists.txt:
-	git clone --depth 1 --no-checkout $(LLAMA_CPP_REPO_URL) $(REPO_PATH)
-	git -C $(REPO_PATH) fetch --depth 1 origin $(LLAMA_CPP_REPO_REF)
-	git -C $(REPO_PATH) checkout -q --detach $(LLAMA_CPP_REPO_REF)
 
 $(MODELS_DIR):
 	mkdir -p $@
@@ -252,23 +285,13 @@ host-configure: | source-ready
 			rm -rf "$(HOST_BUILD_DIR)"; \
 		fi; \
 	fi
-	@if [ ! -f "$(HOST_BUILD_DIR)/Makefile" ]; then \
-		$(CMAKE) -S $(LLAMA_CPP_HOME) -B $(HOST_BUILD_DIR) $(HOST_CMAKE_ARGS); \
-	fi
+	@$(CMAKE) -S $(LLAMA_CPP_HOME) -B $(HOST_BUILD_DIR) $(HOST_CMAKE_ARGS)
 
 
-$(HOST_CONVERT_BIN): $(THIS_MAKEFILE) $(LLAMA_CPP_HOME)/CMakeLists.txt | source-ready
+$(HOST_CONVERT_BIN): source-ready $(THIS_MAKEFILE) $(wildcard $(LLAMA_CPP_HOME)/CMakeLists.txt) $(XSAI_ALLOC_CMAKE_HOOK)
 	@$(MAKE) --no-print-directory host-configure
-	@if [ ! -f "$(HOST_TOOLS_STAMP)" ] || \
-	   [ "$(HOST_TOOLS_STAMP)" -ot "$(THIS_MAKEFILE)" ] || \
-	   [ "$(HOST_TOOLS_STAMP)" -ot "$(LLAMA_CPP_HOME)/CMakeLists.txt" ] || \
-	   [ ! -x "$(HOST_CONVERT_BIN)" ] || \
-	   [ ! -x "$(HOST_QUANTIZE_BIN)" ] || \
-	   [ ! -x "$(HOST_BENCH_BIN)" ] || \
-	   [ ! -x "$(HOST_BATCHED_BENCH_BIN)" ]; then \
-		$(CMAKE) --build $(HOST_BUILD_DIR) --target llama-convert-llama2c-to-ggml llama-quantize llama-bench llama-batched-bench -j$(NPROC); \
-		touch "$(HOST_TOOLS_STAMP)"; \
-	fi
+	@$(CMAKE) --build $(HOST_BUILD_DIR) --target llama-convert-llama2c-to-ggml llama-quantize llama-bench llama-batched-bench -j$(NPROC)
+	@touch "$(HOST_TOOLS_STAMP)"
 	@test -x "$@"
 
 $(HOST_QUANTIZE_BIN): $(HOST_CONVERT_BIN)
@@ -279,26 +302,11 @@ $(HOST_BENCH_BIN) $(HOST_BATCHED_BENCH_BIN): $(HOST_CONVERT_BIN)
 
 host-tools: $(HOST_CONVERT_BIN) $(HOST_QUANTIZE_BIN) $(HOST_BENCH_BIN) $(HOST_BATCHED_BENCH_BIN)
 
-$(TARGET_TOOLS_STAMP): target-configure
-	@needs_build=0; \
-	if [ ! -f "$@" ] || \
-	   [ "$@" -ot "$(THIS_MAKEFILE)" ] || \
-	   [ "$@" -ot "$(LLAMA_CPP_HOME)/CMakeLists.txt" ] || \
-	   [ ! -x "$(TARGET_SIMPLE_BIN)" ] || \
-	   [ ! -x "$(TARGET_SIMPLE_XSAI_BIN)" ] || \
-	   [ ! -x "$(TARGET_BENCH_BIN)" ] || \
-	   [ ! -x "$(TARGET_BATCHED_BENCH_BIN)" ] || \
-	   [ ! -x "$(TARGET_TEST_BACKEND_OPS_BIN)" ]; then \
-		needs_build=1; \
-	elif find "$(LLAMA_CPP_HOME)/cmake" "$(LLAMA_CPP_HOME)/common" "$(LLAMA_CPP_HOME)/examples" "$(LLAMA_CPP_HOME)/ggml" "$(LLAMA_CPP_HOME)/include" "$(LLAMA_CPP_HOME)/src" "$(LLAMA_CPP_HOME)/tests" "$(LLAMA_CPP_HOME)/tools" \
-		-type f \( -name 'CMakeLists.txt' -o -name '*.cmake' -o -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
-		-newer "$@" -print -quit 2>/dev/null | grep -q .; then \
-		needs_build=1; \
-	fi; \
-	if [ $$needs_build -eq 1 ]; then \
-		$(CMAKE) --build $(TARGET_BUILD_DIR) --target llama-simple llama-simple-xsai llama-bench llama-batched-bench test-backend-ops -j$(NPROC); \
-		touch $@; \
-	fi
+$(TARGET_TOOLS_STAMP): target-configure $(XSAI_ALLOC_CMAKE_HOOK)
+	# Let CMake's incremental dependency graph track source/allocator overrides;
+	# timestamps alone cannot identify a different (possibly older) source tree.
+	@$(CMAKE) --build $(TARGET_BUILD_DIR) --target llama-simple llama-simple-xsai llama-bench llama-batched-bench test-backend-ops -j$(NPROC)
+	@touch $@
 
 target-configure: | source-ready
 	@if [ -z "$(LLVM_HOME)" ]; then \
@@ -320,24 +328,28 @@ target-configure: | source-ready
 		cached_build_tools=$$(grep '^LLAMA_BUILD_TOOLS:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_build_tests=$$(grep '^LLAMA_BUILD_TESTS:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_openssl=$$(grep '^LLAMA_OPENSSL:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
+		cached_rv_ame=$$(grep '^GGML_RV_AME:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
+		cached_zvfbfwma=$$(grep '^GGML_RV_ZVFBFWMA:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		expected_phys_base='$(LLAMA_DIRECT_MAP_MEM_START)ul'; \
 		expected_mem_size='$(LLAMA_DIRECT_MAP_MEM_SIZE)ul'; \
 		expected_build_tools='ON'; \
 		expected_build_tests='ON'; \
 		expected_openssl='OFF'; \
+		expected_rv_ame='$(GGML_RV_AME)'; \
+		expected_zvfbfwma='$(GGML_RV_ZVFBFWMA)'; \
 		if [ "$$cached_sysroot" != "$(LLAMA_RISCV_SYSROOT)" ] || \
 		   [ "$$cached_phys_base" != "$$expected_phys_base" ] || \
 		   [ "$$cached_mem_size" != "$$expected_mem_size" ] || \
 		   [ "$$cached_build_tools" != "$$expected_build_tools" ] || \
 		   [ "$$cached_build_tests" != "$$expected_build_tests" ] || \
-		   [ "$$cached_openssl" != "$$expected_openssl" ]; then \
+		   [ "$$cached_openssl" != "$$expected_openssl" ] || \
+		   [ "$$cached_rv_ame" != "$$expected_rv_ame" ] || \
+		   [ "$$cached_zvfbfwma" != "$$expected_zvfbfwma" ]; then \
 			echo "Reconfiguring llama.cpp RISC-V build due to cache mismatch..."; \
 			rm -rf "$(TARGET_BUILD_DIR)"; \
 		fi; \
 	fi
-	@if [ ! -f "$(TARGET_BUILD_DIR)/Makefile" ]; then \
-		$(CMAKE) -S $(LLAMA_CPP_HOME) -B $(TARGET_BUILD_DIR) $(TARGET_CMAKE_ARGS); \
-	fi
+	@$(CMAKE) -S $(LLAMA_CPP_HOME) -B $(TARGET_BUILD_DIR) $(TARGET_CMAKE_ARGS)
 
 $(TARGET_SIMPLE_BIN) $(TARGET_SIMPLE_XSAI_BIN) $(TARGET_BENCH_BIN) $(TARGET_BATCHED_BENCH_BIN) $(TARGET_TEST_BACKEND_OPS_BIN): $(TARGET_TOOLS_STAMP)
 	@test -x "$@"
@@ -452,7 +464,7 @@ install: $(ROOTFS_SIMPLE_BIN) $(ROOTFS_SIMPLE_XSAI_BIN) $(ROOTFS_BENCH_BIN) $(RO
 
 rootfs: install
 
-run-user: $(TARGET_SIMPLE_BIN) $(MODEL_READY_FILE)
+run-user: $(TARGET_SIMPLE_BIN) $(RUN_MODEL)
 	@if [ ! -x "$(QEMU_HOME)/build/qemu-riscv64" ]; then \
 		echo "error: qemu-riscv64 not found at $(QEMU_HOME)/build/qemu-riscv64" >&2; \
 		exit 1; \
@@ -465,7 +477,7 @@ run-user: $(TARGET_SIMPLE_BIN) $(MODEL_READY_FILE)
 		echo "error: RISCV_SYSROOT is empty; ensure riscv64-unknown-linux-gnu-gcc -print-sysroot works" >&2; \
 		exit 1; \
 	fi
-	$(QEMU_HOME)/build/qemu-riscv64 -cpu $(QEMU_USER_CPU_FLAGS) -L $(RISCV_SYSROOT) $(TARGET_SIMPLE_BIN) -m $(RUN_MODEL) "$(RUN_PROMPT)" $(RUN_ARGS)
+	XSAI_ALLOC_MODE=malloc $(QEMU_HOME)/build/qemu-riscv64 -cpu $(QEMU_USER_CPU_FLAGS) -L $(RISCV_SYSROOT) $(TARGET_SIMPLE_BIN) -m $(RUN_MODEL) $(RUN_ARGS) "$(RUN_PROMPT)"
 
 test-backend-ops-user: $(TARGET_TEST_BACKEND_OPS_BIN)
 	@if [ ! -x "$(QEMU_HOME)/build/qemu-riscv64" ]; then \
@@ -484,4 +496,3 @@ clean:
 
 distclean: clean
 	rm -rf $(MODELS_DIR)
-	rm -rf $(REPO_PATH)

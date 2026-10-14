@@ -2,12 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-LLAMA_REPO="$SCRIPT_DIR/repo"
 XSAI_ENV_ROOT="${XSAI_ENV_ROOT:-$(cd -- "$SCRIPT_DIR/../../../.." && pwd)}"
 
 BUILD_DIR="${BUILD_DIR:-$SCRIPT_DIR/build-riscv}"
 QEMU_USER="${QEMU_USER:-$XSAI_ENV_ROOT/qemu/build/qemu-riscv64}"
-QEMU_CPU="${QEMU_CPU:-rv64,v=true,vlen=128,h=true,zvfh=true,zvfhmin=true,x-matrix=true,rlen=512,mlen=65536,melen=32}"
+QEMU_CPU="${QEMU_CPU:-rv64,v=true,vlen=128,h=true,zvfh=true,zvfhmin=true,zvfbfmin=true,zvfbfwma=true,x-matrix=true,rlen=512,mlen=65536,melen=32}"
 AME_SHAPES="${AME_SHAPES:-512,128,512 288,128,288}"
 BUFT="${BUFT:-RISCV_AME}"
 SKIP_BUILD="${SKIP_BUILD:-0}"

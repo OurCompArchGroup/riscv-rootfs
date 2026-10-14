@@ -1,6 +1,8 @@
 $(shell mkdir -p rootfsimg/build)
 
-APPS = hello_xsai after_workload gemm_precomp busybox before_workload llama.cpp pmu_test ame_hw_probe
+# MNN/NCNN are opt-in; match the additive initramfs manifests to these apps.
+XSAI_ROOTFS_EXTRA_APPS ?=
+APPS = hello_xsai after_workload gemm_precomp busybox before_workload llama.cpp pmu_test ame_hw_probe $(XSAI_ROOTFS_EXTRA_APPS)
 # trap qemu_trap dtc lkvm-static
 
 APPS_DIR = $(addprefix apps/, $(APPS))
@@ -41,10 +43,20 @@ XSAI_LLAMA_FAKE_BENCH_TYPE_K ?= f16
 XSAI_LLAMA_FAKE_BENCH_TYPE_V ?= f16
 XSAI_TEST_BACKEND_OPS_NEMU_SIGNAL ?= 1
 XSAI_GGML_AME_LOG ?= 0
+XSAI_MNN_LOOPS ?= 3
+XSAI_MNN_MASK ?= 0
+XSAI_MNN_AME ?= 0
+XSAI_MNN_EXPECTED_ARGMAX ?=
+XSAI_NCNN_TEST ?= 0
 
-.PHONY: rootfsimg xsai-init-config $(APPS_DIR) clean
+.PHONY: rootfsimg xsai-init-config verify-manifest $(APPS_DIR) clean
 
 rootfsimg: xsai-init-config $(APPS_DIR)
+
+# Use the same explicit descriptor list as the firmware packaging invocation.
+ROOTFS_MANIFESTS ?= rootfsimg/initramfs-disk-xsai.txt
+verify-manifest:
+	RISCV_ROOTFS_HOME="$(CURDIR)" python3 rootfsimg/check-manifest.py $(ROOTFS_MANIFESTS)
 
 xsai-init-config:
 	@mkdir -p rootfsimg/build
@@ -69,6 +81,11 @@ xsai-init-config:
 	  printf "XSAI_LLAMA_FAKE_BENCH_TYPE_V='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_TYPE_V)"; \
 	  printf "XSAI_TEST_BACKEND_OPS_NEMU_SIGNAL='%s'\n" "$(XSAI_TEST_BACKEND_OPS_NEMU_SIGNAL)"; \
 	  printf "GGML_AME_LOG='%s'\n" "$(XSAI_GGML_AME_LOG)"; \
+	  printf "XSAI_MNN_LOOPS='%s'\n" "$(XSAI_MNN_LOOPS)"; \
+	  printf "XSAI_MNN_MASK='%s'\n" "$(XSAI_MNN_MASK)"; \
+	  printf "XSAI_MNN_AME='%s'\n" "$(XSAI_MNN_AME)"; \
+	  printf "XSAI_MNN_EXPECTED_ARGMAX='%s'\n" "$(XSAI_MNN_EXPECTED_ARGMAX)"; \
+	  printf "XSAI_NCNN_TEST='%s'\n" "$(XSAI_NCNN_TEST)"; \
 	} > rootfsimg/build/xsai-init.conf
 
 $(APPS_DIR): %:
@@ -84,4 +101,3 @@ distclean:
 	-$(foreach app, $(APPS_DIR), $(MAKE) -s -C $(app) distclean ;)
 	-rm -f rootfsimg/build/*
 	-rm -rf apps/busybox/repo
-	-rm -rf apps/llama.cpp/repo
