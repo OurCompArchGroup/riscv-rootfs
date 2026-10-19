@@ -48,6 +48,8 @@ TARGET_BENCH_BIN       := $(TARGET_BUILD_DIR)/bin/llama-bench
 ROOTFS_BENCH_BIN       := $(ROOTFS_BUILD_DIR)/llama-bench
 TARGET_BATCHED_BENCH_BIN := $(TARGET_BUILD_DIR)/bin/llama-batched-bench
 ROOTFS_BATCHED_BENCH_BIN := $(ROOTFS_BUILD_DIR)/llama-batched-bench
+TARGET_TEST_BACKEND_OPS_BIN := $(TARGET_BUILD_DIR)/bin/test-backend-ops
+ROOTFS_TEST_BACKEND_OPS_BIN := $(ROOTFS_BUILD_DIR)/test-backend-ops
 ROOTFS_WRAPPER := $(ROOTFS_BUILD_DIR)/llama-xsai
 ROOTFS_WRAPPER_SRC := $(APP_DIR)/llama-xsai.sh
 ROOTFS_MODEL_NAME ?= llama-model.gguf
@@ -144,7 +146,7 @@ TARGET_CMAKE_ARGS = \
 	-DLLAMA_CURL=OFF \
 	-DLLAMA_OPENSSL=OFF \
 	-DBUILD_SHARED_LIBS=OFF \
-	-DLLAMA_BUILD_TESTS=OFF \
+	-DLLAMA_BUILD_TESTS=ON \
 	-DLLAMA_BUILD_SERVER=OFF \
 	-DLLAMA_BUILD_TOOLS=ON \
 	-DLLAMA_BUILD_EXAMPLES=ON \
@@ -280,15 +282,16 @@ $(TARGET_TOOLS_STAMP): target-configure
 	   [ ! -x "$(TARGET_SIMPLE_BIN)" ] || \
 	   [ ! -x "$(TARGET_SIMPLE_XSAI_BIN)" ] || \
 	   [ ! -x "$(TARGET_BENCH_BIN)" ] || \
-	   [ ! -x "$(TARGET_BATCHED_BENCH_BIN)" ]; then \
+	   [ ! -x "$(TARGET_BATCHED_BENCH_BIN)" ] || \
+	   [ ! -x "$(TARGET_TEST_BACKEND_OPS_BIN)" ]; then \
 		needs_build=1; \
-	elif find "$(LLAMA_CPP_HOME)/cmake" "$(LLAMA_CPP_HOME)/common" "$(LLAMA_CPP_HOME)/examples" "$(LLAMA_CPP_HOME)/ggml" "$(LLAMA_CPP_HOME)/include" "$(LLAMA_CPP_HOME)/src" "$(LLAMA_CPP_HOME)/tools" \
+	elif find "$(LLAMA_CPP_HOME)/cmake" "$(LLAMA_CPP_HOME)/common" "$(LLAMA_CPP_HOME)/examples" "$(LLAMA_CPP_HOME)/ggml" "$(LLAMA_CPP_HOME)/include" "$(LLAMA_CPP_HOME)/src" "$(LLAMA_CPP_HOME)/tests" "$(LLAMA_CPP_HOME)/tools" \
 		-type f \( -name 'CMakeLists.txt' -o -name '*.cmake' -o -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
 		-newer "$@" -print -quit 2>/dev/null | grep -q .; then \
 		needs_build=1; \
 	fi; \
 	if [ $$needs_build -eq 1 ]; then \
-		$(CMAKE) --build $(TARGET_BUILD_DIR) --target llama-simple llama-simple-xsai llama-bench llama-batched-bench -j$(NPROC); \
+		$(CMAKE) --build $(TARGET_BUILD_DIR) --target llama-simple llama-simple-xsai llama-bench llama-batched-bench test-backend-ops -j$(NPROC); \
 		touch $@; \
 	fi
 
@@ -310,12 +313,14 @@ target-configure: | source-ready
 		cached_phys_base=$$(grep '^RESERVED_PHYS_BASE_ADDR:' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_mem_size=$$(grep '^RESERVED_MEMORY_SIZE:' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_build_tools=$$(grep '^LLAMA_BUILD_TOOLS:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
+		cached_build_tests=$$(grep '^LLAMA_BUILD_TESTS:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_openssl=$$(grep '^LLAMA_OPENSSL:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_ame_mem_trace=$$(grep '^GGML_RV_AME_MEM_TRACE:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_sim_window=$$(grep '^GGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		expected_phys_base='$(LLAMA_DIRECT_MAP_MEM_START)ul'; \
 		expected_mem_size='$(LLAMA_DIRECT_MAP_MEM_SIZE)ul'; \
 		expected_build_tools='ON'; \
+		expected_build_tests='ON'; \
 		expected_openssl='OFF'; \
 		expected_ame_mem_trace='$(GGML_RV_AME_MEM_TRACE_CMAKE)'; \
 		expected_sim_window='$(GGML_EASY_SIM_WINDOW_AFTER_CHECKPOINT_CMAKE)'; \
@@ -323,6 +328,7 @@ target-configure: | source-ready
 		   [ "$$cached_phys_base" != "$$expected_phys_base" ] || \
 		   [ "$$cached_mem_size" != "$$expected_mem_size" ] || \
 		   [ "$$cached_build_tools" != "$$expected_build_tools" ] || \
+		   [ "$$cached_build_tests" != "$$expected_build_tests" ] || \
 		   [ "$$cached_openssl" != "$$expected_openssl" ] || \
 		   [ "$$cached_ame_mem_trace" != "$$expected_ame_mem_trace" ] || \
 		   [ "$$cached_sim_window" != "$$expected_sim_window" ]; then \
@@ -334,10 +340,10 @@ target-configure: | source-ready
 		$(CMAKE) -S $(LLAMA_CPP_HOME) -B $(TARGET_BUILD_DIR) $(TARGET_CMAKE_ARGS); \
 	fi
 
-$(TARGET_SIMPLE_BIN) $(TARGET_SIMPLE_XSAI_BIN) $(TARGET_BENCH_BIN) $(TARGET_BATCHED_BENCH_BIN): $(TARGET_TOOLS_STAMP)
+$(TARGET_SIMPLE_BIN) $(TARGET_SIMPLE_XSAI_BIN) $(TARGET_BENCH_BIN) $(TARGET_BATCHED_BENCH_BIN) $(TARGET_TEST_BACKEND_OPS_BIN): $(TARGET_TOOLS_STAMP)
 	@test -x "$@"
 
-riscv: $(TARGET_SIMPLE_BIN) $(TARGET_SIMPLE_XSAI_BIN) $(TARGET_BENCH_BIN) $(TARGET_BATCHED_BENCH_BIN)
+riscv: $(TARGET_SIMPLE_BIN) $(TARGET_SIMPLE_XSAI_BIN) $(TARGET_BENCH_BIN) $(TARGET_BATCHED_BENCH_BIN) $(TARGET_TEST_BACKEND_OPS_BIN)
 
 $(MODEL_SOURCE_FILE): | $(MODEL_DIR)
 	@if [ -n "$(MODEL_SOURCE_URL)" ]; then \
@@ -429,6 +435,9 @@ $(ROOTFS_BENCH_BIN): $(TARGET_BENCH_BIN)
 $(ROOTFS_BATCHED_BENCH_BIN): $(TARGET_BATCHED_BENCH_BIN)
 	$(call install_rootfs_bin,$(TARGET_BATCHED_BENCH_BIN),$(ROOTFS_BATCHED_BENCH_BIN))
 
+$(ROOTFS_TEST_BACKEND_OPS_BIN): $(TARGET_TEST_BACKEND_OPS_BIN)
+	$(call install_rootfs_bin,$(TARGET_TEST_BACKEND_OPS_BIN),$(ROOTFS_TEST_BACKEND_OPS_BIN))
+
 $(ROOTFS_WRAPPER): $(ROOTFS_WRAPPER_SRC)
 	@mkdir -p $(ROOTFS_BUILD_DIR)
 	install -m 755 $(ROOTFS_WRAPPER_SRC) $@
@@ -440,7 +449,7 @@ $(ROOTFS_MODEL_FILE): $(MODEL_READY_FILE) | $(ROOTFS_BUILD_DIR)
 
 install-model: $(ROOTFS_MODEL_FILE)
 
-install: $(ROOTFS_SIMPLE_BIN) $(ROOTFS_SIMPLE_XSAI_BIN) $(ROOTFS_BENCH_BIN) $(ROOTFS_BATCHED_BENCH_BIN) $(ROOTFS_WRAPPER) install-model
+install: $(ROOTFS_SIMPLE_BIN) $(ROOTFS_SIMPLE_XSAI_BIN) $(ROOTFS_BENCH_BIN) $(ROOTFS_BATCHED_BENCH_BIN) $(ROOTFS_TEST_BACKEND_OPS_BIN) $(ROOTFS_WRAPPER) install-model
 
 rootfs: install
 
@@ -461,7 +470,7 @@ run-user: $(TARGET_SIMPLE_BIN) $(MODEL_READY_FILE)
 
 clean:
 	rm -rf $(HOST_BUILD_DIR) $(TARGET_BUILD_DIR)
-	rm -f $(ROOTFS_SIMPLE_BIN) $(ROOTFS_SIMPLE_XSAI_BIN) $(ROOTFS_BENCH_BIN) $(ROOTFS_BATCHED_BENCH_BIN) $(ROOTFS_WRAPPER) $(ROOTFS_MODEL_FILE)
+	rm -f $(ROOTFS_SIMPLE_BIN) $(ROOTFS_SIMPLE_XSAI_BIN) $(ROOTFS_BENCH_BIN) $(ROOTFS_BATCHED_BENCH_BIN) $(ROOTFS_TEST_BACKEND_OPS_BIN) $(ROOTFS_WRAPPER) $(ROOTFS_MODEL_FILE)
 
 distclean: clean
 	rm -rf $(MODELS_DIR)

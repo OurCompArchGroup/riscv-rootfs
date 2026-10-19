@@ -13,6 +13,7 @@
 !*.gguf.om
 !riscv-lib-paths.mk
 repo/
+apps/llama.cpp/llama-repo-switch.txt
 build/
 build-*/
 !apps/llama.cpp/.github/skills/build-host-binaries/

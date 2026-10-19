@@ -9,6 +9,7 @@ file /bin/llama-simple ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-simple 755 0 0
 file /bin/llama-simple-xsai ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-simple-xsai 755 0 0
 file /bin/llama-bench ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-bench 755 0 0
 file /bin/llama-batched-bench ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-batched-bench 755 0 0
+file /bin/test-backend-ops ${RISCV_ROOTFS_HOME}/rootfsimg/build/test-backend-ops 755 0 0
 file /bin/llama-xsai ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-xsai 755 0 0
 # file /root/llama-model.gguf ${RISCV_ROOTFS_HOME}/rootfsimg/build/llama-model.gguf 644 0 0
 file /root/llama3.2_1b_q8.gguf.om ${RISCV_ROOTFS_HOME}/apps/llama.cpp/models/llama3.2_1b_q8.gguf.om 644 0 0
