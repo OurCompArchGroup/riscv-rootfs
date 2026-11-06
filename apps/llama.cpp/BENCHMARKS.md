@@ -103,6 +103,42 @@ That means:
 - `make -C firmware/riscv-rootfs/apps/llama.cpp install` copies the RISC-V benchmarks into `rootfsimg/build/`
 - the initramfs manifest includes both benchmark binaries under `/bin/`
 
+## xsai-blas Adapter Unit Tests On The Host
+
+The xsai-blas adapter layer (`repo/ggml/src/ggml-cpu/arch/riscv/xsai`) is separate
+from the AME backend (`repo/ggml/src/ggml-cpu/arch/riscv/ame`); the two have no
+cross-references. On a non-RISC-V host the four adapter unit tests
+(`xsai-plan-test`, `xsai-observe-test`, `xsai-fusion-test`, `xsai-backend-test`)
+build and run without any ggml-base or AME code. They compile only the adapter
+translation units and link the host xsai-blas archive; a `--gc-sections` link
+drops the unreferenced registration code.
+
+Set a reusable pair of variables first:
+
+```bash
+XSAI_BLAS_HOME="${XSAI_BLAS_HOME:-path/to/xsai-blas}"
+HOST_XSAI_LIB="path/to/host/xsai-blas.a"   # host build of the xsai-blas archive
+```
+
+Configure and run the tests:
+
+```bash
+cmake -S repo -B build-host-xsai-tests \
+  -DGGML_XSAI_BACKEND=ON -DGGML_XSAI_BACKEND_TESTS=ON \
+  -DLLAMA_BUILD_TESTS=ON -DGGML_BUILD_TESTS=OFF \
+  -DGGML_CCACHE=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF \
+  -DXSAI_BLAS_HOME="$XSAI_BLAS_HOME" \
+  -DXSAI_BLAS_LIBRARY="$HOST_XSAI_LIB"
+cmake --build build-host-xsai-tests --target \
+  xsai-plan-test xsai-observe-test xsai-fusion-test xsai-backend-test
+ctest --test-dir build-host-xsai-tests -R xsai --output-on-failure
+```
+
+The RISC-V target build keeps using the AME backend plus the same adapter
+sources (`-DGGML_RV_AME=ON -DXSAI_BLAS_HOME=... -DXSAI_BLAS_LIBRARY=...` in
+[Makefile](Makefile)); each layer claims the ops of its own buffers, so
+enabling them together is supported.
+
 ## Command Templates
 
 Keep shared notes and committed docs free of machine-specific absolute paths.
@@ -236,3 +272,54 @@ If you are asking one of these questions, use `llama-batched-bench`:
 - How much KV cache is needed when prompts are shared or not shared?
 
 For your current use case, the default answer is: use `llama-bench` first.
+
+## Default XSAI workload
+
+The default model preset is `stories15M`. With quantization left on, the file is
+`models/stories15M/stories15M-q8_0.gguf`. `llama-simple-xsai` is the workload
+binary. It prints prefill and decode cycles on stderr. The xsai ggml backend,
+when linked, prints one route report after the run.
+
+`XSAI_GGML_BACKEND=0` keeps the same binary on the ggml CPU path. `1` (or an
+unset variable) lets registered ops use xsai-blas plans. An op that is not in
+the map, or whose plan create/execute returns unsupported before any write,
+is counted as `cpu_fallback`.
+
+`XSAI_GGML_Q8` controls only Q8_0 `MUL_MAT` placement in a combined AME + XSAI
+build. `1` (default) places Q8_0 weights on the xsai buffer and dispatches the
+matmul to xsai-blas GEMM; `0` leaves them with AME/CPU while the rest of the
+xsai backend stays enabled. This is the A/B switch for the adapter path. The
+rootfs wrapper exposes it as `--q8 on|off`. The route report prints
+`q8 probe_claims=`, `probe_declines=`, and `foreign_declines=` so a run can be
+checked for Q8 placement directly.
+
+Host reference (generic xsai-blas, not a RISC-V result):
+
+```bash
+MODEL_PATH="firmware/riscv-rootfs/apps/llama.cpp/models/stories15M/stories15M-q8_0.gguf"
+BIN="build/validation/stage9/llama-host/bin/llama-simple-xsai"
+
+XSAI_GGML_BACKEND=1 "$BIN" -m "$MODEL_PATH" -n 32 "Hello my name is"
+XSAI_GGML_BACKEND=0 "$BIN" -m "$MODEL_PATH" -n 32 "Hello my name is"
+```
+
+RISC-V user-mode, after `make -C firmware/riscv-rootfs/apps/llama.cpp riscv`:
+
+```bash
+make -C firmware/riscv-rootfs/apps/llama.cpp run-user \
+  RUN_MODEL="firmware/riscv-rootfs/apps/llama.cpp/models/stories15M/stories15M-q8_0.gguf" \
+  RUN_PROMPT="Hello my name is"
+```
+
+`run-user` uses `qemu-riscv64` with
+`-cpu rv64,v=true,vlen=128,h=true,zvfh=true,zvfhmin=true,x-matrix=true,rlen=512,mlen=65536,melen=32`.
+
+Stderr fields:
+
+- `XSAI Inference Report` — prefill cycles, decode cycles, TTFT, TPOT
+- `xsai-backend routes` — per-op `xsai=` and `cpu_fallback=` counts
+- `xsai-backend plan_create=` `key_miss=` `cache_hit=` `execute=` `prepared_bytes=`
+- `xsai-backend observe` — prepare, plan_create, workspace, execute, and kernel counts and nanoseconds
+
+`plan_create` equals `key_miss`. `execute` counts successful `plan_execute` calls.
+`kernel_count` in the observe line copies the execute sample and does not include prepare or plan create.
