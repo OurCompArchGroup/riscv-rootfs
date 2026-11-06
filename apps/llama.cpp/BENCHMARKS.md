@@ -286,12 +286,15 @@ the map, or whose plan create/execute returns unsupported before any write,
 is counted as `cpu_fallback`.
 
 `XSAI_GGML_Q8` controls only Q8_0 `MUL_MAT` placement in a combined AME + XSAI
-build. `1` (default) places Q8_0 weights on the xsai buffer and dispatches the
-matmul to xsai-blas GEMM; `0` leaves them with AME/CPU while the rest of the
-xsai backend stays enabled. This is the A/B switch for the adapter path. The
-rootfs wrapper exposes it as `--q8 on|off`. The route report prints
-`q8 probe_claims=`, `probe_declines=`, and `foreign_declines=` so a run can be
-checked for Q8 placement directly.
+build. `1` (default) places Q8_0 weights on the xsai buffer and lets the xsai
+adapter own the op; `0` leaves the weights on AME buffers. The AME Q8 path in
+this branch already delegates to the same xsai plan runtime, so the switch
+selects placement and trait ownership, not a different kernel. The rest of the
+xsai backend stays enabled either way. The rootfs wrapper exposes it as
+`--q8 on|off`. The route report prints `q8 probe_claims=`, `probe_declines=`,
+and `foreign_declines=` so a run can be checked for Q8 placement directly:
+with the switch on, every Q8 probe is claimed; with it off, every probe is
+declined and the weight stays on the AME buffer.
 
 Host reference (generic xsai-blas, not a RISC-V result):
 

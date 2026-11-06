@@ -19,8 +19,9 @@ usage: llama-xsai [--model PATH] [--prompt TEXT] [--xsai on|off] [--q8 on|off] [
   --xsai off    XSAI_GGML_BACKEND=0. Every op stays on the ggml CPU path.
   --q8 on       XSAI_GGML_Q8=1 (default). Q8_0 MUL_MAT is placed on the xsai
                 buffer and dispatched to xsai-blas GEMM.
-  --q8 off      XSAI_GGML_Q8=0. Q8_0 MUL_MAT stays with AME/CPU even when the
-                backend is on; useful for A/B runs.
+  --q8 off      XSAI_GGML_Q8=0. Q8_0 weights stay on AME buffers even when the
+                backend is on; the AME Q8 path still uses xsai plans, so this
+                A/B selects placement and trait ownership.
   --diagnose    Print the dispatch mode before exec. The backend writes route
                 counts, plan-create, key-miss, execute, and prepared bytes to stderr.
 USAGE
@@ -96,7 +97,7 @@ export XSAI_GGML_Q8="$q8_mode"
 if [ "$xsai_mode" = "0" ]; then
   echo "llama-xsai: dispatch=cpu-fallback XSAI_GGML_BACKEND=0" >&2
 elif [ "$q8_mode" = "0" ]; then
-  echo "llama-xsai: dispatch=xsai XSAI_GGML_BACKEND=1 XSAI_GGML_Q8=0 (Q8 matmul stays on AME/CPU)" >&2
+  echo "llama-xsai: dispatch=xsai XSAI_GGML_BACKEND=1 XSAI_GGML_Q8=0 (Q8 weights stay on AME buffers)" >&2
 else
   echo "llama-xsai: dispatch=xsai XSAI_GGML_BACKEND=1 XSAI_GGML_Q8=1" >&2
 fi
