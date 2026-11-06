@@ -16,6 +16,19 @@ ROOTFS_LINKER_FLAGS ?= -Wl,--dynamic-linker=$(ROOTFS_INTERPRETER) -Wl,-rpath,$(R
 RISCV ?= /opt/riscv
 export PATH := $(RISCV)/bin:$(PATH)
 
+# xsai-blas lives at the top level of the workspace and produces one unified
+# Linux RISC-V archive. TARGET_* overrides support an AME-only A/B arm;
+# TARGET_EXTRA_CMAKE_ARGS is appended last and recorded in the build directory
+# so changing it forces a reconfigure.
+XSAI_BLAS_HOME ?= $(XS_PROJECT_ROOT)/xsai-blas
+XSAI_BLAS_BUILD_DIR ?= $(XSAI_BLAS_HOME)/build/linux-xsai
+XSAI_BLAS_LIB := $(XSAI_BLAS_BUILD_DIR)/xsai-blas-riscv64-xs.a
+XSAI_BLAS_TILE_M ?= 128
+XSAI_BLAS_TILE_N ?= 128
+TARGET_XSAI_BLAS_HOME ?= $(XSAI_BLAS_HOME)
+TARGET_XSAI_BLAS_LIBRARY ?= $(XSAI_BLAS_LIB)
+TARGET_EXTRA_CMAKE_ARGS ?=
+
 # Source acquisition/version locks belong to the parent workspace. Never select
 # another tree just because the canonical source is absent.
 # *_HOME remain explicit legacy aliases; *_SRC take precedence.
@@ -177,7 +190,10 @@ TARGET_CMAKE_ARGS = $(XSAI_ALLOC_CMAKE_ARGS) \
 	-DGGML_RV_ZVFBFWMA=$(GGML_RV_ZVFBFWMA) \
 	-DGGML_RVV=ON \
 	-DCMAKE_EXE_LINKER_FLAGS="$(ROOTFS_LINKER_FLAGS)" \
-	-DRISCV_SYSROOT=$(LLAMA_RISCV_SYSROOT)
+	-DRISCV_SYSROOT=$(LLAMA_RISCV_SYSROOT) \
+	-DXSAI_BLAS_HOME=$(TARGET_XSAI_BLAS_HOME) \
+	-DXSAI_BLAS_LIBRARY=$(TARGET_XSAI_BLAS_LIBRARY) \
+	$(TARGET_EXTRA_CMAKE_ARGS)
 
 # Custom allocator: route llama.cpp tensor memory into the DMA-coherent
 # reserved physical region (same region as XSAI_DIRECT_MAP_MEM_*).
@@ -197,11 +213,27 @@ endif
 
 .PHONY: repo source-ready xsai-alloc-sync allocator-ready host-tools riscv fetch-model convert-model quantize-model \
 	prepare-model prepare-stories15m prepare-stories110M install install-model rootfs \
-	run-user test-backend-ops-user print-config clean distclean help
+	run-user test-backend-ops-user print-config clean distclean help xsai-blas
+
+# --- xsai-blas library (unified Linux RISC-V archive) ---
+xsai-blas:
+	@echo "Building xsai-blas unified Linux archive..."
+	@mkdir -p $(XSAI_BLAS_BUILD_DIR)
+	@cmake -S $(XSAI_BLAS_HOME) -B $(XSAI_BLAS_BUILD_DIR) \
+	  --toolchain $(XSAI_BLAS_HOME)/cmake/riscv64-linux.cmake \
+	  -DXSAI_BLAS_RUNTIME=std \
+	  -DXSAI_BLAS_OUTPUT_SUFFIX=riscv64-xs \
+	  -DXSAI_BLAS_TILE_M=$(XSAI_BLAS_TILE_M) \
+	  -DXSAI_BLAS_TILE_N=$(XSAI_BLAS_TILE_N) \
+	  > $(XSAI_BLAS_BUILD_DIR)/configure.log 2>&1
+	@cmake --build $(XSAI_BLAS_BUILD_DIR) -- -j$(NPROC) \
+	  > $(XSAI_BLAS_BUILD_DIR)/build.log 2>&1
+	@test -f $(XSAI_BLAS_LIB)
 
 help:
 	@echo "llama.cpp xsai wrapper"
 	@echo "  source-ready / repo: validate selected source and MNN allocator; no downloads"
+	@echo "  xsai-blas: build $(XSAI_BLAS_LIB) from $(XSAI_BLAS_HOME)"
 	@echo "  sources: LLAMA_CPP_SRC=$(LLAMA_CPP_SRC) MNN_SRC=$(MNN_SRC)"
 	@echo "  *_HOME are legacy override aliases; CMake >= 3.19 is required"
 	@echo "  make -C firmware/riscv-rootfs/apps/llama.cpp print-config"
@@ -216,6 +248,14 @@ print-config:
 	@echo "MNN_SRC=$(MNN_SRC)"
 	@echo "XSAI_ALLOC_SRC=$(XSAI_ALLOC_SRC)"
 	@echo "XSAI_ALLOC_HEADER=$(XSAI_ALLOC_HEADER)"
+	@echo "XSAI_BLAS_HOME=$(XSAI_BLAS_HOME)"
+	@echo "XSAI_BLAS_BUILD_DIR=$(XSAI_BLAS_BUILD_DIR)"
+	@echo "XSAI_BLAS_LIB=$(XSAI_BLAS_LIB)"
+	@echo "XSAI_BLAS_TILE_M=$(XSAI_BLAS_TILE_M)"
+	@echo "XSAI_BLAS_TILE_N=$(XSAI_BLAS_TILE_N)"
+	@echo "TARGET_XSAI_BLAS_HOME=$(TARGET_XSAI_BLAS_HOME)"
+	@echo "TARGET_XSAI_BLAS_LIBRARY=$(TARGET_XSAI_BLAS_LIBRARY)"
+	@echo "TARGET_EXTRA_CMAKE_ARGS=$(TARGET_EXTRA_CMAKE_ARGS)"
 	@echo "MODEL_PRESET=$(MODEL_PRESET)"
 	@echo "MODEL_KIND=$(MODEL_KIND)"
 	@echo "MODEL_NAME=$(MODEL_NAME)"
@@ -308,7 +348,7 @@ $(TARGET_TOOLS_STAMP): target-configure $(XSAI_ALLOC_CMAKE_HOOK)
 	@$(CMAKE) --build $(TARGET_BUILD_DIR) --target llama-simple llama-simple-xsai llama-bench llama-batched-bench test-backend-ops -j$(NPROC)
 	@touch $@
 
-target-configure: | source-ready
+target-configure: xsai-blas | source-ready
 	@if [ -z "$(LLVM_HOME)" ]; then \
 		echo "error: LLVM_HOME is not set" >&2; \
 		exit 1; \
@@ -330,6 +370,9 @@ target-configure: | source-ready
 		cached_openssl=$$(grep '^LLAMA_OPENSSL:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_rv_ame=$$(grep '^GGML_RV_AME:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
 		cached_zvfbfwma=$$(grep '^GGML_RV_ZVFBFWMA:BOOL=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
+		cached_xsai_blas=$$(grep '^XSAI_BLAS_HOME:PATH=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
+		cached_xsai_blas_lib=$$(grep '^XSAI_BLAS_LIBRARY:FILEPATH=' "$(TARGET_BUILD_DIR)/CMakeCache.txt" | head -n1 | cut -d= -f2-); \
+		cached_extra=$$(cat "$(TARGET_BUILD_DIR)/.extra-cmake-args" 2>/dev/null || true); \
 		expected_phys_base='$(LLAMA_DIRECT_MAP_MEM_START)ul'; \
 		expected_mem_size='$(LLAMA_DIRECT_MAP_MEM_SIZE)ul'; \
 		expected_build_tools='ON'; \
@@ -344,12 +387,16 @@ target-configure: | source-ready
 		   [ "$$cached_build_tests" != "$$expected_build_tests" ] || \
 		   [ "$$cached_openssl" != "$$expected_openssl" ] || \
 		   [ "$$cached_rv_ame" != "$$expected_rv_ame" ] || \
-		   [ "$$cached_zvfbfwma" != "$$expected_zvfbfwma" ]; then \
+		   [ "$$cached_zvfbfwma" != "$$expected_zvfbfwma" ] || \
+		   [ "$$cached_xsai_blas" != "$(TARGET_XSAI_BLAS_HOME)" ] || \
+		   [ "$$cached_xsai_blas_lib" != "$(TARGET_XSAI_BLAS_LIBRARY)" ] || \
+		   [ "$$cached_extra" != "$(TARGET_EXTRA_CMAKE_ARGS)" ]; then \
 			echo "Reconfiguring llama.cpp RISC-V build due to cache mismatch..."; \
 			rm -rf "$(TARGET_BUILD_DIR)"; \
 		fi; \
 	fi
 	@$(CMAKE) -S $(LLAMA_CPP_HOME) -B $(TARGET_BUILD_DIR) $(TARGET_CMAKE_ARGS)
+	@printf '%s\n' '$(TARGET_EXTRA_CMAKE_ARGS)' > "$(TARGET_BUILD_DIR)/.extra-cmake-args"
 
 $(TARGET_SIMPLE_BIN) $(TARGET_SIMPLE_XSAI_BIN) $(TARGET_BENCH_BIN) $(TARGET_BATCHED_BENCH_BIN) $(TARGET_TEST_BACKEND_OPS_BIN): $(TARGET_TOOLS_STAMP)
 	@test -x "$@"
