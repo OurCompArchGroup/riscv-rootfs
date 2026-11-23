@@ -213,6 +213,18 @@ run_llama_bench_full()
   fi
   echo "[xsai-workload] LLAMA_BENCH_REAL_BEGIN model=$full_model t=$full_threads p=$full_prompt b=$full_batch ub=$full_ubatch n=$full_decode rep=$full_repetitions warmup=$full_warmup diagnostic_progress=$full_progress packed_q8=$GGML_AME_PACKED_Q8 whole_k_q8=$GGML_AME_WHOLE_K_Q8 f16_bf16=$GGML_AME_F16_BF16 ame_profile=$GGML_AME_PROFILE op_profile=$GGML_XSAI_OP_PROFILE real_weights=1 all_layers=1"
   if run_workload_cmd /bin/llama-bench "$@"; then
+    if [ -n "${LLAMA_BENCH_QKV_PREFIX_OUT:-}" ]; then
+      for prefix_role in q v k; do
+        for prefix_kind in output pack; do
+          prefix_dump=$LLAMA_BENCH_QKV_PREFIX_OUT.$prefix_role.$prefix_kind
+          if ! [ -s "$prefix_dump" ] || ! /bin/busybox wc -c "$prefix_dump" ||
+             ! /bin/busybox sha256sum "$prefix_dump"; then
+            echo "[xsai-workload] LLAMA_BENCH_REAL_FAIL incomplete prefix dump: $prefix_dump"
+            return 1
+          fi
+        done
+      done
+    fi
     echo "[xsai-workload] LLAMA_BENCH_REAL_PASS"
     return 0
   else
