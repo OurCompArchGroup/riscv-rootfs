@@ -37,6 +37,32 @@ apply_cmdline_overrides()
       xsai.run_after_workload=*) RUN_AFTER_WORKLOAD="${arg#xsai.run_after_workload=}" ;;
       xsai.dump_thp=*) DUMP_THP="${arg#xsai.dump_thp=}" ;;
       xsai.llama_model=*) LLAMA_MODEL="${arg#xsai.llama_model=}" ;;
+      xsai.llama_full_model=*) XSAI_LLAMA_FULL_MODEL="${arg#xsai.llama_full_model=}" ;;
+      xsai.llama_full_t=*) XSAI_LLAMA_FULL_T="${arg#xsai.llama_full_t=}" ;;
+      xsai.llama_full_p=*) XSAI_LLAMA_FULL_P="${arg#xsai.llama_full_p=}" ;;
+      xsai.llama_full_b=*) XSAI_LLAMA_FULL_B="${arg#xsai.llama_full_b=}" ;;
+      xsai.llama_full_ub=*) XSAI_LLAMA_FULL_UB="${arg#xsai.llama_full_ub=}" ;;
+      xsai.llama_full_n=*) XSAI_LLAMA_FULL_N="${arg#xsai.llama_full_n=}" ;;
+      xsai.llama_full_r=*) XSAI_LLAMA_FULL_R="${arg#xsai.llama_full_r=}" ;;
+      xsai.llama_full_warmup=*) XSAI_LLAMA_FULL_WARMUP="${arg#xsai.llama_full_warmup=}" ;;
+      xsai.llama_full_progress=*) XSAI_LLAMA_FULL_PROGRESS="${arg#xsai.llama_full_progress=}" ;;
+      xsai.llama_full_fa=*) XSAI_LLAMA_FULL_FA="${arg#xsai.llama_full_fa=}" ;;
+      xsai.llama_full_type_k=*) XSAI_LLAMA_FULL_TYPE_K="${arg#xsai.llama_full_type_k=}" ;;
+      xsai.llama_full_type_v=*) XSAI_LLAMA_FULL_TYPE_V="${arg#xsai.llama_full_type_v=}" ;;
+      xsai.llama_full_preflight=*) XSAI_LLAMA_FULL_PREFLIGHT="${arg#xsai.llama_full_preflight=}" ;;
+      xsai.pldm_exit_marker=*) XSAI_PLDM_EXIT_MARKER="${arg#xsai.pldm_exit_marker=}" ;;
+      xsai.ggml_ame_packed_q8=*) export GGML_AME_PACKED_Q8="${arg#xsai.ggml_ame_packed_q8=}" ;;
+      xsai.ggml_ame_whole_k_q8=*) export GGML_AME_WHOLE_K_Q8="${arg#xsai.ggml_ame_whole_k_q8=}" ;;
+      xsai.ggml_ame_f16_bf16=*) export GGML_AME_F16_BF16="${arg#xsai.ggml_ame_f16_bf16=}" ;;
+      xsai.ggml_ame_profile=*) export GGML_AME_PROFILE="${arg#xsai.ggml_ame_profile=}" ;;
+      xsai.ggml_op_profile=*) export GGML_XSAI_OP_PROFILE="${arg#xsai.ggml_op_profile=}" ;;
+      xsai.ggml_ame_log=*) export GGML_AME_LOG="${arg#xsai.ggml_ame_log=}" ;;
+      xsai.ggml_ame_mx_config=*) export GGML_AME_MX_CONFIG="${arg#xsai.ggml_ame_mx_config=}" ;;
+      xsai.ggml_ame_mxfp4=*) export GGML_AME_MXFP4="${arg#xsai.ggml_ame_mxfp4=}" ;;
+      xsai.ggml_ame_mxfp8=*) export GGML_AME_MXFP8="${arg#xsai.ggml_ame_mxfp8=}" ;;
+      xsai.ggml_ame_mxfp8_format=*) export GGML_AME_MXFP8_FORMAT="${arg#xsai.ggml_ame_mxfp8_format=}" ;;
+      xsai.ggml_ame_mx32_verified=*) export GGML_AME_MX32_VERIFIED="${arg#xsai.ggml_ame_mx32_verified=}" ;;
+      xsai.ggml_ame_mxfp4_k64=*) export GGML_AME_MXFP4_K64="${arg#xsai.ggml_ame_mxfp4_k64=}" ;;
     esac
   done
 }
@@ -152,6 +178,12 @@ run_workload()
   fi
 
   run_selected_workload
+  # Emit the receipt before after_workload's existing status/trap instruction:
+  # a TrapFinish-enabled testbench need not return from that instruction.
+  if [ "${XSAI_PLDM_EXIT_MARKER:-0}" = 1 ] &&
+     [ "$WORKLOAD" = llama-bench-real ] && [ "$WORKLOAD_STATUS" = 0 ]; then
+    log "PLDM_WORKLOAD_DONE workload=$WORKLOAD model=${XSAI_LLAMA_FULL_MODEL:-$LLAMA_MODEL} real_weights=1 all_layers=1 status=0"
+  fi
   run_after_workload
 
   if [ "$DUMP_THP" = 1 ]; then

@@ -34,15 +34,52 @@ XSAI_TRACE_WORKLOAD ?= 1
 XSAI_LLAMA_TEST_BACKEND_OPS ?= 1
 XSAI_LLAMA_FAKE_BENCH_MODELS ?=
 XSAI_LLAMA_FAKE_BENCH_P ?= 128
+XSAI_LLAMA_FAKE_BENCH_B ?=
+XSAI_LLAMA_FAKE_BENCH_UB ?=
 XSAI_LLAMA_FAKE_BENCH_N ?= 0
 XSAI_LLAMA_FAKE_BENCH_R ?= 1
 XSAI_LLAMA_FAKE_BENCH_WARMUP ?= 0
 XSAI_LLAMA_FAKE_BENCH_ESTIMATE_LAYERS ?= 1
+XSAI_LLAMA_FAKE_BENCH_OUTPUT_ERR ?= none
 XSAI_LLAMA_FAKE_BENCH_FA ?= 0
 XSAI_LLAMA_FAKE_BENCH_TYPE_K ?= f16
 XSAI_LLAMA_FAKE_BENCH_TYPE_V ?= f16
+# Explicit full, real-weight benchmark; the historical workloads stay unchanged.
+# Empty MODEL uses the existing initramfs/model-disk LLAMA_MODEL selection.
+XSAI_LLAMA_FULL_MODEL ?=
+XSAI_LLAMA_FULL_T ?= 1
+XSAI_LLAMA_FULL_P ?= 512
+XSAI_LLAMA_FULL_B ?= 2048
+XSAI_LLAMA_FULL_UB ?= 512
+XSAI_LLAMA_FULL_N ?= 0
+XSAI_LLAMA_FULL_R ?= 3
+XSAI_LLAMA_FULL_WARMUP ?= 1
+XSAI_LLAMA_FULL_PROGRESS ?= 0
+XSAI_LLAMA_FULL_FA ?= 0
+XSAI_LLAMA_FULL_TYPE_K ?= f16
+XSAI_LLAMA_FULL_TYPE_V ?= f16
+XSAI_LLAMA_FULL_PREFLIGHT ?= 0
+XSAI_PLDM_EXIT_MARKER ?= 0
 XSAI_TEST_BACKEND_OPS_NEMU_SIGNAL ?= 1
 XSAI_GGML_AME_LOG ?= 0
+# A normal assignment intentionally overrides firmware's exported historical
+# default of 1; an explicit make command-line assignment still takes precedence.
+# Export these controls only for the explicitly selected benchmark workloads.
+XSAI_GGML_AME_PACKED_Q8 = 0
+XSAI_GGML_AME_WHOLE_K_Q8 ?= 0
+XSAI_GGML_AME_F16_BF16 ?= 0
+# Optional existing backend admission control. Empty preserves historical
+# generated configuration bytes and the inherited runtime environment.
+XSAI_GGML_AME_F16_BF16_REQUIRE_AME_BUFFER ?=
+XSAI_GGML_AME_PROFILE ?= 0
+XSAI_GGML_OP_PROFILE ?= 0
+# Manual experimental opt-ins; never infer scaled-MMA support from capacity.
+XSAI_GGML_AME_MX_CONFIG ?=
+XSAI_GGML_AME_MXFP4 ?= 0
+XSAI_GGML_AME_MXFP8 ?= 0
+XSAI_GGML_AME_MXFP8_FORMAT ?= e4m3
+XSAI_GGML_AME_MX32_VERIFIED ?= 0
+XSAI_GGML_AME_MXFP4_K64 ?= 0
 XSAI_MNN_LOOPS ?= 3
 XSAI_MNN_MASK ?= 0
 XSAI_MNN_AME ?= 0
@@ -72,15 +109,48 @@ xsai-init-config:
 	  printf "XSAI_LLAMA_TEST_BACKEND_OPS='%s'\n" "$(XSAI_LLAMA_TEST_BACKEND_OPS)"; \
 	  printf "XSAI_LLAMA_FAKE_BENCH_MODELS='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_MODELS)"; \
 	  printf "XSAI_LLAMA_FAKE_BENCH_P='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_P)"; \
+	  printf "XSAI_LLAMA_FAKE_BENCH_B='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_B)"; \
+	  printf "XSAI_LLAMA_FAKE_BENCH_UB='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_UB)"; \
 	  printf "XSAI_LLAMA_FAKE_BENCH_N='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_N)"; \
 	  printf "XSAI_LLAMA_FAKE_BENCH_R='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_R)"; \
 	  printf "XSAI_LLAMA_FAKE_BENCH_WARMUP='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_WARMUP)"; \
 	  printf "XSAI_LLAMA_FAKE_BENCH_ESTIMATE_LAYERS='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_ESTIMATE_LAYERS)"; \
+	  printf "XSAI_LLAMA_FAKE_BENCH_OUTPUT_ERR='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_OUTPUT_ERR)"; \
 	  printf "XSAI_LLAMA_FAKE_BENCH_FA='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_FA)"; \
 	  printf "XSAI_LLAMA_FAKE_BENCH_TYPE_K='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_TYPE_K)"; \
 	  printf "XSAI_LLAMA_FAKE_BENCH_TYPE_V='%s'\n" "$(XSAI_LLAMA_FAKE_BENCH_TYPE_V)"; \
+	  printf "XSAI_LLAMA_FULL_MODEL='%s'\n" "$(XSAI_LLAMA_FULL_MODEL)"; \
+	  printf "XSAI_LLAMA_FULL_T='%s'\n" "$(XSAI_LLAMA_FULL_T)"; \
+	  printf "XSAI_LLAMA_FULL_P='%s'\n" "$(XSAI_LLAMA_FULL_P)"; \
+	  printf "XSAI_LLAMA_FULL_B='%s'\n" "$(XSAI_LLAMA_FULL_B)"; \
+	  printf "XSAI_LLAMA_FULL_UB='%s'\n" "$(XSAI_LLAMA_FULL_UB)"; \
+	  printf "XSAI_LLAMA_FULL_N='%s'\n" "$(XSAI_LLAMA_FULL_N)"; \
+	  printf "XSAI_LLAMA_FULL_R='%s'\n" "$(XSAI_LLAMA_FULL_R)"; \
+	  printf "XSAI_LLAMA_FULL_WARMUP='%s'\n" "$(XSAI_LLAMA_FULL_WARMUP)"; \
+	  printf "XSAI_LLAMA_FULL_PROGRESS='%s'\n" "$(XSAI_LLAMA_FULL_PROGRESS)"; \
+	  printf "XSAI_LLAMA_FULL_FA='%s'\n" "$(XSAI_LLAMA_FULL_FA)"; \
+	  printf "XSAI_LLAMA_FULL_TYPE_K='%s'\n" "$(XSAI_LLAMA_FULL_TYPE_K)"; \
+	  printf "XSAI_LLAMA_FULL_TYPE_V='%s'\n" "$(XSAI_LLAMA_FULL_TYPE_V)"; \
+	  printf "XSAI_LLAMA_FULL_PREFLIGHT='%s'\n" "$(XSAI_LLAMA_FULL_PREFLIGHT)"; \
+	  printf "XSAI_PLDM_EXIT_MARKER='%s'\n" "$(XSAI_PLDM_EXIT_MARKER)"; \
 	  printf "XSAI_TEST_BACKEND_OPS_NEMU_SIGNAL='%s'\n" "$(XSAI_TEST_BACKEND_OPS_NEMU_SIGNAL)"; \
 	  printf "GGML_AME_LOG='%s'\n" "$(XSAI_GGML_AME_LOG)"; \
+	  printf '%s\n' 'if [ "$$WORKLOAD" = llama-bench-real ] || [ "$$WORKLOAD" = llama-bench-full ]; then'; \
+	  printf "export GGML_AME_PACKED_Q8='%s'\n" "$(XSAI_GGML_AME_PACKED_Q8)"; \
+	  printf "export GGML_AME_WHOLE_K_Q8='%s'\n" "$(XSAI_GGML_AME_WHOLE_K_Q8)"; \
+	  printf "export GGML_AME_F16_BF16='%s'\n" "$(XSAI_GGML_AME_F16_BF16)"; \
+	  if [ -n "$(XSAI_GGML_AME_F16_BF16_REQUIRE_AME_BUFFER)" ]; then \
+	    printf "export GGML_AME_F16_BF16_REQUIRE_AME_BUFFER='%s'\n" "$(XSAI_GGML_AME_F16_BF16_REQUIRE_AME_BUFFER)"; \
+	  fi; \
+	  printf "export GGML_AME_PROFILE='%s'\n" "$(XSAI_GGML_AME_PROFILE)"; \
+	  printf "export GGML_XSAI_OP_PROFILE='%s'\n" "$(XSAI_GGML_OP_PROFILE)"; \
+	  printf "export GGML_AME_MX_CONFIG='%s'\n" "$(XSAI_GGML_AME_MX_CONFIG)"; \
+	  printf "export GGML_AME_MXFP4='%s'\n" "$(XSAI_GGML_AME_MXFP4)"; \
+	  printf "export GGML_AME_MXFP8='%s'\n" "$(XSAI_GGML_AME_MXFP8)"; \
+	  printf "export GGML_AME_MXFP8_FORMAT='%s'\n" "$(XSAI_GGML_AME_MXFP8_FORMAT)"; \
+	  printf "export GGML_AME_MX32_VERIFIED='%s'\n" "$(XSAI_GGML_AME_MX32_VERIFIED)"; \
+	  printf "export GGML_AME_MXFP4_K64='%s'\n" "$(XSAI_GGML_AME_MXFP4_K64)"; \
+	  printf '%s\n' 'export GGML_AME_LOG' 'fi'; \
 	  printf "XSAI_MNN_LOOPS='%s'\n" "$(XSAI_MNN_LOOPS)"; \
 	  printf "XSAI_MNN_MASK='%s'\n" "$(XSAI_MNN_MASK)"; \
 	  printf "XSAI_MNN_AME='%s'\n" "$(XSAI_MNN_AME)"; \
