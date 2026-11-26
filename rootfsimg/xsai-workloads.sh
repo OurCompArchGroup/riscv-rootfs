@@ -345,6 +345,22 @@ run_selected_workload()
         WORKLOAD_STATUS=$?
       fi
       ;;
+    llama-mxfp4-runtime)
+      log "launching MXFP4 runtime quantization-byte gate"
+      run_and_capture /bin/test-quantize-fns --mxfp4-runtime-only
+      ;;
+    llama-mx128-native)
+      log "launching native MXFP4/MXFP8 matmul gate"
+      run_and_capture /bin/test-quantize-fns --ame-mx128-native-only
+      ;;
+    llama-mx128-qwen-native)
+      log "launching native MXFP4 matmul gate with synthetic Qwen shape"
+      run_and_capture /bin/test-quantize-fns --ame-mx128-qwen-native-only
+      ;;
+    llama-rmsnorm-mxfp4-qkv)
+      log "launching native RMSNorm/MXFP4 QKV gate"
+      run_and_capture /bin/test-quantize-fns --ame-rmsnorm-fusion-qkv-only
+      ;;
     llama-fake-bench-suite)
       log "launching llama fake-like bench suite"
       if run_llama_fake_bench_suite; then

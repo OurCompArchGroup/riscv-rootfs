@@ -49,6 +49,25 @@ class AiWorkloadTests(unittest.TestCase):
         (self.models / "mnn-input-0.txt").write_text("input")
         self.binary("MNNV2Basic.out", body)
 
+    def test_mxfp_workloads_pass_the_intended_gate(self):
+        self.binary("test-quantize-fns", 'printf "quantize:%s\\n" "$@"')
+        cases = (
+            ("llama-mxfp4-runtime", "--mxfp4-runtime-only"),
+            ("llama-mx128-native", "--ame-mx128-native-only"),
+            ("llama-mx128-qwen-native", "--ame-mx128-qwen-native-only"),
+            ("llama-rmsnorm-mxfp4-qkv", "--ame-rmsnorm-fusion-qkv-only"),
+        )
+        for workload, option in cases:
+            with self.subTest(workload=workload):
+                result = self.run_workload(workload)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines()[-1], f"quantize:{option}")
+
+    def test_mxfp_gate_status_reaches_init(self):
+        self.assertEqual(self.run_workload("llama-mxfp4-runtime").returncode, 127)
+        self.binary("test-quantize-fns", "exit 9")
+        self.assertEqual(self.run_workload("llama-mxfp4-runtime").returncode, 9)
+
     def test_mnn_failure_is_not_success(self):
         self.prepare_mnn("exit 7")
         result = self.run_workload("mnn-smoke")
