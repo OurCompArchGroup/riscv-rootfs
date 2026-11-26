@@ -16,11 +16,11 @@ ROOTFS_LINKER_FLAGS ?= -Wl,--dynamic-linker=$(ROOTFS_INTERPRETER) -Wl,-rpath,$(R
 RISCV ?= /opt/riscv
 export PATH := $(RISCV)/bin:$(PATH)
 
-# xsai-blas lives at the top level of the workspace and produces one unified
+# xsai-blas lives under software/ in the workspace and produces one unified
 # Linux RISC-V archive. TARGET_* overrides support an AME-only A/B arm;
 # TARGET_EXTRA_CMAKE_ARGS is appended last and recorded in the build directory
 # so changing it forces a reconfigure.
-XSAI_BLAS_HOME ?= $(XS_PROJECT_ROOT)/xsai-blas
+XSAI_BLAS_HOME ?= $(XS_PROJECT_ROOT)/software/xsai-blas
 XSAI_BLAS_BUILD_DIR ?= $(XSAI_BLAS_HOME)/build/linux-xsai
 XSAI_BLAS_LIB := $(XSAI_BLAS_BUILD_DIR)/xsai-blas-riscv64-xs.a
 XSAI_BLAS_TILE_M ?= 128

@@ -10,7 +10,7 @@ NAME = xsai-blas-test
 SRCS = main.c
 
 XS_PROJECT_ROOT ?= $(abspath $(RISCV_ROOTFS_HOME)/../..)
-XSAI_BLAS_HOME  ?= $(XS_PROJECT_ROOT)/xsai-blas
+XSAI_BLAS_HOME  ?= $(XS_PROJECT_ROOT)/software/xsai-blas
 # i8 GEMM tile M/N (64 or 128); K stays 64. One library build per tile.
 TILE_M          ?= 128
 TILE_N          ?= 128
