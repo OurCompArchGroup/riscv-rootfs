@@ -129,6 +129,8 @@ RISCV_TRIPLE ?= riscv64-unknown-linux-gnu
 RISCV_MARCH ?= rv64gc_zba_zicbop
 RISCV_MABI ?= lp64d
 GGML_RV_AME ?= ON
+GGML_RV_MXFP4_PACKED ?= OFF
+GGML_RV_MXFP4_PACKED_ASM ?= $(XSAI_ENV_ROOT)/nexus-am/tests/ame-gemm/matop.S
 GGML_RV_ZVFBFWMA ?= OFF
 # cmake cross-compile sysroot: prefer the active env/toolchain sysroot and
 # fall back only if nothing else is available.
@@ -174,6 +176,8 @@ TARGET_CMAKE_ARGS = $(XSAI_ALLOC_CMAKE_ARGS) \
 	-DLLAMA_BUILD_TOOLS=ON \
 	-DLLAMA_BUILD_EXAMPLES=ON \
 	-DGGML_RV_AME=$(GGML_RV_AME) \
+	-DGGML_RV_MXFP4_PACKED:BOOL=$(GGML_RV_MXFP4_PACKED) \
+	-DGGML_RV_MXFP4_PACKED_ASM:FILEPATH="$(abspath $(GGML_RV_MXFP4_PACKED_ASM))" \
 	-DGGML_RV_ZFH=ON \
 	-DGGML_RV_ZVFH=ON \
 	-DGGML_RV_ZVFBFWMA=$(GGML_RV_ZVFBFWMA) \
@@ -206,6 +210,7 @@ help:
 	@echo "  source-ready / repo: validate selected source and MNN allocator; no downloads"
 	@echo "  sources: LLAMA_CPP_SRC=$(LLAMA_CPP_SRC) MNN_SRC=$(MNN_SRC)"
 	@echo "  *_HOME are legacy override aliases; CMake >= 3.19 is required"
+	@echo "  GGML_RV_MXFP4_PACKED=ON: build with the AM PACK assembly; requires a matching CPU"
 	@echo "  make -C firmware/riscv-rootfs/apps/llama.cpp print-config"
 	@echo "  make -C firmware/riscv-rootfs/apps/llama.cpp prepare-model"
 	@echo "  make -C firmware/riscv-rootfs/apps/llama.cpp prepare-stories110M"
@@ -235,6 +240,8 @@ print-config:
 	@echo "LLAMA_DIRECT_MAP_MEM_START=$(LLAMA_DIRECT_MAP_MEM_START)"
 	@echo "LLAMA_DIRECT_MAP_MEM_SIZE=$(LLAMA_DIRECT_MAP_MEM_SIZE)"
 	@echo "GGML_RV_AME=$(GGML_RV_AME)"
+	@echo "GGML_RV_MXFP4_PACKED=$(GGML_RV_MXFP4_PACKED)"
+	@echo "GGML_RV_MXFP4_PACKED_ASM=$(abspath $(GGML_RV_MXFP4_PACKED_ASM))"
 	@echo "GGML_RV_ZVFBFWMA=$(GGML_RV_ZVFBFWMA)"
 	@echo "QEMU_USER_CPU_FLAGS=$(QEMU_USER_CPU_FLAGS)"
 
